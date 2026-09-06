@@ -18,6 +18,8 @@ NS_ASSUME_NONNULL_BEGIN
 // Labeled byte counts for each Sparkle data store plus a @"total" entry.
 + (NSDictionary<NSString *, NSNumber *> *)storageBreakdown;
 
++ (NSString *)fontsDirectory;
++ (NSString *)languagePacksDirectory;
 @end
 
 NS_ASSUME_NONNULL_END
