@@ -805,3 +805,104 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 @property (nonatomic) double maximumWidth;
 - (void)setIsShimmering:(BOOL)shimmering;
 @end
+
+
+// Instagram classes the ported features read properties on. Forward declarations
+// alone leave those properties invisible to the compiler.
+// Instagram's UNUserNotificationCenterDelegate. Decides what happens to a
+// notification that arrives while the app is in the foreground; it recognizes only
+// its own, so anything else is presented as nothing at all.
+@interface IGAppCoordinator : NSObject
+- (void)userNotificationCenter:(id)center willPresentNotification:(id)notification withCompletionHandler:(id)handler;
+@end
+
+@interface IGAudioStatusAnnouncer : NSObject
++ (instancetype)sharedInstance;
+- (BOOL)isAudioEnabledForSoundBehavior:(long long)behavior;
+- (void)_announceForDeviceStateChangesIfNeededForAudioEnabled:(BOOL)enabled reason:(long long)reason;
+@end
+
+// Server-driven gating values for Direct. `activeNowGracePeriod` is how long IG
+// keeps drawing someone as active after their last activity, which is why the
+// green dot outlives the actual session. Absent before 411, where the grace
+// period is not exposed as a gate at all.
+@interface IGDirectGatingService : NSObject
+- (long long)activeNowGracePeriod;
+// Some builds synthesize this cached getter at runtime even though it is omitted
+// from their dumped declaration. The selector is probed before its hook group
+// is installed.
+- (NSNumber *)activeNowGracePeriodCacheValue;
+@end
+
+// One typing event. Carries the sender pk directly, so typing does not have to be
+// resolved through the thread it arrived on. Identical across 410.1.0 and 443.0.0.
+@interface IGDirectTypingStatus : NSObject
+@property (readonly, nonatomic) NSString *threadId;
+@property (readonly, nonatomic) NSString *userPk;
+@property (readonly, nonatomic) NSDate *sentDate;
+@property (readonly, nonatomic) BOOL isActive;
+@property (readonly, nonatomic) double lifetime;
+@end
+
+// Holds the live typing state for every thread. The dictionary is replaced
+// wholesale on each change, so its setter is the one funnel every incoming typing
+// update passes through. Value shape is not contractual, hence the defensive walk
+// in the hook.
+@interface IGDirectTypingStatusService : NSObject
+@property (copy) NSDictionary *threadIdToTypingStatuses;
+- (id)updatedTypingStatusesForThreadId:(id)threadId;
+@end
+
+// Value object describing the follow control's appearance. Stays Objective-C on
+// every supported build; the category carrying the default factory was renamed
+// between versions but the selector itself did not change.
+@interface IGFollowButtonViewConfiguration : NSObject
++ (instancetype)defaultButtonConfiguration;
+@end
+
+// Receives every realtime presence update for users IG tracks. The selector is
+// unchanged across 410.1.0 through 438.0.0; only the owning framework moved.
+//
+// Note this is only the realtime *push* path. IG also populates presence by
+// fetching (see the periodic scheduler and inbox fetch), and those updates never
+// reach this callback, so it is not a complete view of what IG knows.
+@interface IGPresenceManager : NSObject
+- (void)presenceRealtimeDataProvider:(id)provider
+             didReceiveUpdateForUserPk:(id)pk
+                              isActive:(BOOL)isActive
+                      lastActivityAtMs:(double)lastActivityAtMs
+                          capabilities:(unsigned long long)capabilities
+                         correlationId:(id)correlationId
+                         isCloseFriend:(BOOL)isCloseFriend;
+// The store IG itself reads to draw activity dots, regardless of how the state
+// got there. Values are IGPresenceState, an opaque value object.
+- (id)presenceStatesByUserPk;
+- (id)presenceStateForUser:(id)user;
+@end
+
+// Presence poll timer owned by IGPresenceManager. IG picks the interval at
+// session setup; Sparkle updates the stored interval and restarts this timer
+// when the active account's accuracy settings change.
+@interface IGPresencePeriodicScheduler : NSObject
+- (id)initWithIntervalInSeconds:(unsigned long long)seconds block:(id)block;
+- (void)stop;
+- (void)start;
+@end
+
+// Backing store for the reel list the story viewer pages through. The view
+// controller keeps its own copy for tap-forward navigation, while horizontal
+// swipes are driven by the list adapter reading this store.
+@interface IGStoryViewerDataStore : NSObject
+- (id)modelItems;
+- (void)replaceModelItems:(id)items;
+- (void)replaceModelItems:(id)items maxCount:(long long)count;
+@end
+
+// IG 410 uses one Objective-C bottom bar. Its initializer already exposes the
+// native switch that removes only the fake comment composer while preserving a
+// CTA when one is present.
+@interface IGSundialViewerBottomBar : UIView
+- (instancetype)initWithCTAButtonType:(NSInteger)type
+                   fakeComposerEnabled:(BOOL)enabled
+                      commentBarDisabled:(BOOL)disabled;
+@end
