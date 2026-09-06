@@ -1,3 +1,4 @@
+#import "../Account/SPKAccountManager.h"
 #import "SPKAutoSaveFilter.h"
 
 #import "../../Utils.h"
@@ -81,11 +82,13 @@ static NSArray<NSDictionary *> *SPKAutoSaveFilterEntriesFromRawValue(SPKAutoSave
 }
 
 NSArray<NSDictionary *> *SPKAutoSaveFilterList(SPKAutoSaveFilterConfig *config) {
-    return SPKAutoSaveFilterEntriesFromRawValue(config, SPKPreferenceObjectForKey(SPKAutoSaveFilterActiveListKey(config)));
+    NSString *key = SPKAutoSaveFilterResolvedListKey(config, SPKAutoSaveFilterActiveListKey(config));
+    return SPKAutoSaveFilterEntriesFromRawValue(config, SPKPreferenceObjectForKey(key));
 }
 
 void SPKAutoSaveFilterSetList(SPKAutoSaveFilterConfig *config, NSArray<NSDictionary *> *entries) {
-    SPKPreferenceSetObject(SPKAutoSaveFilterEntriesFromRawValue(config, entries), SPKAutoSaveFilterActiveListKey(config));
+    NSString *key = SPKAutoSaveFilterResolvedListKey(config, SPKAutoSaveFilterActiveListKey(config));
+    SPKPreferenceSetObject(SPKAutoSaveFilterEntriesFromRawValue(config, entries), key);
 }
 
 BOOL SPKAutoSaveFilterListContains(SPKAutoSaveFilterConfig *config, NSString *identity) {

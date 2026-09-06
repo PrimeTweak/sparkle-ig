@@ -36,6 +36,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// Identifier for list-change notifications (add/remove/toggle).
 @property (nonatomic, copy) NSString *ruleNotificationIdentifier;
 
+@property (nonatomic, assign) BOOL alwaysAccountScopedLists;
 @end
 
 #ifdef __cplusplus
