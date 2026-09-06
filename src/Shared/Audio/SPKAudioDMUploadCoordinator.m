@@ -156,6 +156,37 @@ static void SPKAudioDMNotify(NSString *title, NSString *message, BOOL success) {
     return sender && ([sender respondsToSelector:SPKAudioDMSendSelector()] || [sender respondsToSelector:SPKAudioDMSendLegacySelector()]);
 }
 
+// Opens one picker straight away, for a caller that has already asked which
+// source to use. Same setup as the dialog path, minus the question.
++ (void)presentUploadPickerForSource:(SPKAudioDMUploadSource)source
+                        senderTarget:(id)senderTarget
+                           presenter:(UIViewController *)presenter
+                          sourceView:(UIView *)sourceView {
+    if (![self senderTargetSupportsAudioUpload:senderTarget] || !presenter) {
+        SPKAudioDMNotify(@"Audio upload unavailable", @"This Instagram build does not expose the audio sender.", SPKNotificationToneError);
+        SPKWarnLog(@"AudioUpload", @"Missing direct audio sender on target: %@", senderTarget);
+        return;
+    }
+
+    SPKAudioDMUploadCoordinator *coordinator = [[SPKAudioDMUploadCoordinator alloc] init];
+    coordinator.senderTarget = senderTarget;
+    coordinator.presenter = presenter;
+    coordinator.sourceView = sourceView ?: presenter.view;
+    sSPKAudioActiveDMUploadCoordinator = coordinator;
+
+    switch (source) {
+        case SPKAudioDMUploadSourcePhotos:
+            [coordinator presentLibraryPicker];
+            break;
+        case SPKAudioDMUploadSourceGallery:
+            [coordinator presentGalleryPicker];
+            break;
+        case SPKAudioDMUploadSourceFiles:
+            [coordinator presentFilesPicker];
+            break;
+    }
+}
+
 + (void)presentUploadPickerForSenderTarget:(id)senderTarget
                                  presenter:(UIViewController *)presenter
                                 sourceView:(UIView *)sourceView {

@@ -793,3 +793,15 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 - (long long)switchToUser:(id)user destinationAppSurface:(id)surface destinationURL:(id)url entryPoint:(long long)point loggingData:(id)data;
 - (long long)switchToUserWithPK:(id)pk destinationAppSurface:(id)surface destinationURL:(id)url entryPoint:(long long)point loggingData:(id)data;
 @end
+
+// Instagram's own follow control, reached through a protocol rather than a
+// class: the concrete type moved to Swift and its name varies by build.
+@protocol SPKIGFollowButtonConforming <NSObject>
+- (instancetype)initWithViewConfiguration:(id)configuration;
+- (void)setViewConfiguration:(id)configuration;
+@property (nonatomic) long long buttonState;
+@property (nonatomic, readonly) UILabel *titleLabel;
+@property (nonatomic) double minimumWidth;
+@property (nonatomic) double maximumWidth;
+- (void)setIsShimmering:(BOOL)shimmering;
+@end

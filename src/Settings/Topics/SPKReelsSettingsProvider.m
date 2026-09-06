@@ -15,6 +15,15 @@ static NSString *const kSPKReelsActionButtonEnabledKey = @"reels_action_btn";
             [SPKSetting switchCellWithTitle:@"Hide Reels header"
                                        icon:SPKSettingsIcon(@"reels")
                                 defaultsKey:@"reels_hide_header"],
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Hide comment bar"
+                                                             icon:SPKSettingsIcon(@"comment")
+                                                      defaultsKey:@"reels_hide_viewer_comment_bar"
+                                                  requiresRestart:YES];
+                row.helpText = @"Removes the comment field at the bottom of the reels viewer.";
+                row.searchKeywords = @"comment bar viewer reels hide field";
+                row;
+            }),
             [SPKSetting switchCellWithTitle:@"Hide repost button"
                                        icon:SPKSettingsIcon(@"repost")
                                 defaultsKey:@"reels_hide_repost_btn"

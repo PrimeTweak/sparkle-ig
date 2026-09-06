@@ -139,6 +139,14 @@ static NSArray *SPKStoriesSettingsSections(void) {
             [SPKSetting switchCellWithTitle:@"Hide trending prompts"
                                        icon:SPKSettingsIcon(@"arrow_up_right")
                                 defaultsKey:@"stories_hide_join_trending"],
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Hide recent highlights"
+                                                             icon:SPKSettingsIcon(@"highlights")
+                                                      defaultsKey:@"stories_hide_recent_highlights"];
+                row.helpText = @"Drops resurfaced highlights from the tray, from tapping forward and from swiping sideways.";
+                row.searchKeywords = @"highlights recent resurfaced tray hide";
+                row;
+            }),
             [SPKSetting switchCellWithTitle:@"Show story mentions"
                                        icon:SPKSettingsIcon(@"mention")
                                 defaultsKey:@"stories_mentions_btn"],
