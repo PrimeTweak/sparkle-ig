@@ -249,6 +249,10 @@
 
 @interface IGTabBar : UIView
 - (instancetype)initWithFrame:(CGRect)frame
+    defaultConfig:(id)defaultConfig
+    immersiveConfig:(id)immersiveConfig
+    backgroundView:(id)backgroundView
+    launcherSet:(id)launcherSet;
                 defaultConfig:(id)defaultConfig
               immersiveConfig:(id)immersiveConfig
                backgroundView:(id)backgroundView
@@ -930,6 +934,8 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 + (void)makeAlert:(FLEXAlertBuilder)block showFrom:(UIViewController *)viewController;
 // Construct and display an action sheet-style alert
 + (void)makeSheet:(FLEXAlertBuilder)block
+    showFrom:(UIViewController *)viewController
+    source:(id)viewOrBarItem;
          showFrom:(UIViewController *)viewController
            source:(id)viewOrBarItem;
 
@@ -1065,6 +1071,12 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 // reach this callback, so it is not a complete view of what IG knows.
 @interface IGPresenceManager : NSObject
 - (void)presenceRealtimeDataProvider:(id)provider
+    didReceiveUpdateForUserPk:(id)pk
+    isActive:(BOOL)isActive
+    lastActivityAtMs:(double)lastActivityAtMs
+    capabilities:(unsigned long long)capabilities
+    correlationId:(id)correlationId
+    isCloseFriend:(BOOL)isCloseFriend;
              didReceiveUpdateForUserPk:(id)pk
                               isActive:(BOOL)isActive
                       lastActivityAtMs:(double)lastActivityAtMs
@@ -1100,6 +1112,8 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 // CTA when one is present.
 @interface IGSundialViewerBottomBar : UIView
 - (instancetype)initWithCTAButtonType:(NSInteger)type
+    fakeComposerEnabled:(BOOL)enabled
+    commentBarDisabled:(BOOL)disabled;
                    fakeComposerEnabled:(BOOL)enabled
                       commentBarDisabled:(BOOL)disabled;
 @end
@@ -1200,4 +1214,6 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 
 @interface _TtC19IGSundialFeedFooter37IGSundialViewerBottomBarCommentConfig : _TtC19IGSundialFeedFooter30IGSundialViewerBottomBarConfig
 - (instancetype)initWithCTAButtonType:(NSInteger)type
+    fakeComposerEnabled:(BOOL)enabled
+    commentBarDisabled:(BOOL)disabled;
 @end
