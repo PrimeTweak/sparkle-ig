@@ -214,6 +214,7 @@
 @end
 
 @interface IGExploreGridViewController : IGViewController
+- (void)spk_updateExploreGridVisibility;
 @end
 
 @interface UIImage ()
@@ -266,6 +267,17 @@
 - (NSInteger)tabBarStyle;
 - (void)_exploreButtonLongPressed:(id)gesture;
 - (void)_updateTabBarVisibilityForController:(id)controller;
+- (id)_buttonForTabBarSurface:(id)surface;
+- (IGMainAppSurfaceIntent *)selectedTabBarSurface;
+- (void)_createAndConfigureReelsButtonIfNeeded;
+- (void)_timelineButtonPressed;
+- (void)_discoverVideoButtonPressed;
+- (void)_directInboxButtonPressed;
+- (void)_exploreButtonPressed;
+- (void)_profileButtonPressed;
+- (UINavigationController *)discoverVideoNavigationController;
+- (UINavigationController *)navigationViewControllerForAppSurfaceIntent:(IGMainAppSurfaceIntent *)intent;
+- (void)setSelectedTabBarSurface:(IGMainAppSurfaceIntent *)surface animated:(BOOL)animated;
 @end
 
 @interface IGMainAppScrollingContainerViewController : UIViewController
@@ -400,6 +412,11 @@
 
 @interface IGStoryFullscreenSectionController : NSObject
 @property (nonatomic, strong, readwrite) IGMedia *currentStoryItem;
+- (BOOL)audioEnabled;
+- (void)setAudioEnabled:(BOOL)enabled reason:(long long)reason;
+- (void)didUpdateToObject:(id)object;
+- (void)didSelectItemAtIndex:(long long)index;
+- (id)overlayView;
 @end
 
 @interface IGStoriesMidcardsController : NSObject
@@ -410,6 +427,7 @@
 
 @interface IGStoryVideoView : UIView
 @property (nonatomic, weak, readwrite) IGStoryFullscreenSectionController *captionDelegate;
+@property (nonatomic, readonly) BOOL isAudioAvailable;
 @end
 
 @interface IGStoryModernVideoView : UIView
@@ -427,6 +445,10 @@
 @end
 
 @interface IGDirectVisualMessageViewerController : UIViewController
++ (instancetype)sharedInstance;
+- (BOOL)isAudioEnabledForSoundBehavior:(long long)behavior;
+- (void)_announceForDeviceStateChangesIfNeededForAudioEnabled:(BOOL)enabled reason:(long long)reason;
+- (void)scrollViewDidEndDecelerating:(id)scrollView;
 @end
 
 // Full-screen viewer for permanent DM media (camera-roll photos/videos, chat-menu
@@ -460,6 +482,7 @@
 
 @interface IGUserSession : NSObject
 @property (readonly, nonatomic) IGUser *user;
+- (id)presenceManager;
 @end
 
 @interface IGWindow : UIWindow
@@ -540,6 +563,7 @@
 // presence line rendered into the cell's social-context label (Full Last Active).
 @interface IGDSSegmentedPillBarView : UIView
 - (id)delegate;
+- (CGSize)sizeThatFits:(CGSize)size expanded:(BOOL)expanded;
 @end
 
 @interface IGImageWithAccessoryButton : IGTapButton
@@ -731,6 +755,7 @@
 @interface IGStoryTrayViewModel : NSObject
 @property (nonatomic, readonly) NSString *pk;
 @property (nonatomic, readonly) BOOL isUnseenNux;
+- (id)diffIdentifier;
 @end
 
 @interface _TtC32IGSundialOrganicCTAContainerView32IGSundialOrganicCTAContainerView : UIView
@@ -1119,6 +1144,10 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 
 @interface IGTabBarViewControllerManager : NSObject
 @property (readonly, nonatomic) UINavigationController *savedCollectionsNavigationController;
+@property (readonly, nonatomic) NSArray *buttons;
+- (void)addTabButton:(id)button;
+- (void)clearTabButtons;
+- (void)setSelectedTabBarItemIndex:(NSInteger)index;
 @end
 
 // The follow controller ships as an Objective-C class on older builds and as a Swift class on newer
@@ -1170,4 +1199,5 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 @end
 
 @interface _TtC19IGSundialFeedFooter37IGSundialViewerBottomBarCommentConfig : _TtC19IGSundialFeedFooter30IGSundialViewerBottomBarConfig
+- (instancetype)initWithCTAButtonType:(NSInteger)type
 @end
