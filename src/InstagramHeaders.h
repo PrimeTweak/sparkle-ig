@@ -906,3 +906,93 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
                    fakeComposerEnabled:(BOOL)enabled
                       commentBarDisabled:(BOOL)disabled;
 @end
+
+
+// Remaining declarations the ported features depend on, taken whole from the
+// upstream header so no property is left behind a forward declaration.
+@protocol FBIntentHandler <NSObject>
+- (void)handleIntent:(id)intent;
+@end
+
+@interface IGExploreChipBarView : UIView
+- (void)configureWith:(id)topics;
+- (CGSize)sizeThatFits:(CGSize)size expanded:(BOOL)expanded;
+@end
+
+@interface IGExploreViewController : IGViewController
+- (void)spk_updateExploreShimmerVisibility;
+@end
+
+@interface IGSaveHomeIntentTarget : NSObject
+- (instancetype)initWithEntryModule:(NSString *)entryModule;
+- (instancetype)initWithEntryModule:(NSString *)entryModule selectedTab:(nullable NSString *)selectedTab;
+@end
+
+// One reel inside the story viewer. Resurfaced highlights carry a reelPK of the
+// form "highlightRewind:<id>".
+@interface IGStoryViewerViewModel : NSObject
+@property (nonatomic, readonly, copy) NSString *reelPK;
+@end
+
+@interface IGSundialFeedDataSource : NSObject
+- (NSArray *)objectsForListAdapter:(id)adapter;
+@end
+
+@protocol IGSundialFeedSource <NSObject>
+@property (readonly, nonatomic) BOOL isReelsHomeOrTab;
+@end
+
+@interface IGTabBarControllerSwipeCoordinator : NSObject
+@end
+
+@interface IGTabBarViewControllerManager : NSObject
+@property (readonly, nonatomic) UINavigationController *savedCollectionsNavigationController;
+@end
+
+// The follow controller ships as an Objective-C class on older builds and as a Swift class on newer
+// ones. Both expose this, so Sparkle asks whichever is present through a shared shape.
+@protocol SPKFollowControlling <NSObject>
+@property (nonatomic, readonly) BOOL canShowRelationshipSheetWhenFollowing;
+// Set by the surfaces whose follow control turns into a Message button once the account is
+// followed. Only newer builds expose it to the Objective-C runtime.
+@property (nonatomic, readonly) BOOL showMessageButtonWhenFollowing;
+@end
+
+// Instagram's design-system font entry points. Every label in the app resolves its
+// typeface through one of these rather than through UIKit directly, which makes them
+// the seam for replacing the app-wide font. Present on 410 through 442; the branded,
+// script, and monospaced-digit members of the category are deliberately omitted here
+// because replacing those would corrupt the logo, the story text tool, and any
+// column-aligned numerals.
+@interface UIFont (Instagram)
++ (UIFont *)ig_systemFontOfSize:(CGFloat)size weight:(CGFloat)weight;
++ (UIFont *)ig_systemFontOfSize:(CGFloat)size;
++ (UIFont *)ig_lightSystemFontOfSize:(CGFloat)size;
++ (UIFont *)ig_mediumSystemFontOfSize:(CGFloat)size;
++ (UIFont *)ig_semiboldSystemFontOfSize:(CGFloat)size;
++ (UIFont *)ig_boldSystemFontOfSize:(CGFloat)size;
++ (UIFont *)ig_heavySystemFontOfSize:(CGFloat)size;
++ (UIFont *)ig_italicSystemFontOfSize:(CGFloat)size;
++ (UIFont *)ig_systemDynamicFontOfSize:(CGFloat)size;
++ (UIFont *)ig_systemDynamicFontOfSize:(CGFloat)size weight:(CGFloat)weight;
++ (UIFont *)ig_lightSystemDynamicFontOfSize:(CGFloat)size;
++ (UIFont *)ig_semiboldSystemDynamicFontOfSize:(CGFloat)size;
++ (UIFont *)ig_boldSystemDynamicFontOfSize:(CGFloat)size;
++ (UIFont *)ig_heavySystemDynamicFontOfSize:(CGFloat)size;
+@end
+
+@interface UIViewController (FBIntentNavigation)
+- (id<FBIntentHandler>)fb_intentHandler;
+@end
+
+@interface _TtC19IGSundialFeedFooter24IGSundialViewerBottomBar : UIView
+@property (nonatomic, retain) _TtC19IGSundialFeedFooter30IGSundialViewerBottomBarConfig *config;
+@end
+
+// Reels viewer footer. IG 443+ uses the Swift feed-footer implementation and
+// represents the fake comment composer with a dedicated config/content pair.
+@interface _TtC19IGSundialFeedFooter30IGSundialViewerBottomBarConfig : NSObject
+@end
+
+@interface _TtC19IGSundialFeedFooter42IGSundialViewerBottomBarCommentContentView : UIView
+@end
