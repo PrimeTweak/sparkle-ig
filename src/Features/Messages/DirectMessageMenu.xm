@@ -1,5 +1,4 @@
 #import <UIKit/UIKit.h>
-#import "SPKStrings.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <substrate.h>
@@ -109,7 +108,7 @@ static id SPKDMUploadAudioMenuItemForComposer(id composer) {
     }
 
     __weak id weakComposer = composer;
-    return SPKDMMenuItem(SPKL(@"MESSAGES_AUDIO_UPLOAD_AUDIO_TITLE"), [SPKAssetUtils instagramIconNamed:@"audio_upload" pointSize:24.0], ^(__unused id item) {
+    return SPKDMMenuItem(@"Upload Audio", [SPKAssetUtils instagramIconNamed:@"audio_upload" pointSize:24.0], ^(__unused id item) {
         id strongComposer = weakComposer;
         if (!strongComposer)
             return;
@@ -130,7 +129,7 @@ static id SPKDMUploadMediaMenuItemForComposer(id composer) {
     }
 
     __weak id weakComposer = composer;
-    return SPKDMMenuItem(SPKL(@"MESSAGES_DIRECT_MESSAGE_MENU_UPLOAD_PHOTO_TEXT"), [SPKAssetUtils instagramIconNamed:@"photo" pointSize:24.0], ^(__unused id item) {
+    return SPKDMMenuItem(@"Upload Photo", [SPKAssetUtils instagramIconNamed:@"photo" pointSize:24.0], ^(__unused id item) {
         id strongComposer = weakComposer;
         if (!strongComposer)
             return;
@@ -175,11 +174,11 @@ static void SPKDMRunAudioAction(id viewModel, SPKAudioAction action, NSString *n
 static NSArray<SPKDirectMenuAction *> *SPKDMAudioActionsForViewModel(id viewModel) {
     __strong id capturedViewModel = viewModel;
     NSArray<NSArray *> *specs = @[
-        @[ SPKL(@"ALERT_ACTION_SAVE_AUDIO_FILES"), @"audio_download", @(SPKAudioActionSaveToFiles), kSPKNotificationDownloadAudio ],
-        @[ SPKL(@"ALERT_ACTION_SHARE_AUDIO"), @"share", @(SPKAudioActionConvertAndShare), kSPKNotificationDownloadAudioShare ],
-        @[ SPKL(@"ALERT_ACTION_SAVE_AUDIO_GALLERY"), @"sparkle_gallery", @(SPKAudioActionConvertAndSaveToGallery), kSPKNotificationDownloadAudioGallery ],
-        @[ SPKL(@"ALERT_ACTION_PLAY_AUDIO"), @"play", @(SPKAudioActionPlay), kSPKNotificationPlayAudio ],
-        @[ SPKL(@"ALERT_ACTION_COPY_AUDIO_DOWNLOAD_URL"), @"link", @(SPKAudioActionCopyURL), kSPKNotificationCopyAudioURL ],
+        @[ @"Save Audio to Files", @"audio_download", @(SPKAudioActionSaveToFiles), kSPKNotificationDownloadAudio ],
+        @[ @"Share Audio", @"share", @(SPKAudioActionConvertAndShare), kSPKNotificationDownloadAudioShare ],
+        @[ @"Save Audio to Gallery", @"sparkle_gallery", @(SPKAudioActionConvertAndSaveToGallery), kSPKNotificationDownloadAudioGallery ],
+        @[ @"Play Audio", @"play", @(SPKAudioActionPlay), kSPKNotificationPlayAudio ],
+        @[ @"Copy Audio Download URL", @"link", @(SPKAudioActionCopyURL), kSPKNotificationCopyAudioURL ],
     ];
 
     NSMutableArray<SPKDirectMenuAction *> *actions = [NSMutableArray arrayWithCapacity:specs.count];
@@ -205,8 +204,8 @@ static void SPKDMRunAudioAction(id viewModel, SPKAudioAction action, NSString *n
     SPKAudioItem *audioItem = [SPKAudioDownloadCoordinator audioItemFromMediaObject:viewModel source:SPKAudioSourceDMs];
     if (!audioItem) {
         SPKNotify(kSPKNotificationDownloadShare,
-                  SPKL(@"GENERAL_AUDIO_PAGE_DOWNLOAD_COULD_NOT_FIND_AUDIO_URL_TEXT"),
-                  SPKL(@"MESSAGES_DIRECT_MESSAGE_MENU_REFRESH_THREAD_TRY_AGAIN_IF_URL_EXPIRED_TEXT"),
+                  @"Could not find audio URL",
+                  @"Refresh the thread and try again if the URL expired.",
                   @"error_filled",
                   SPKNotificationToneError);
         return;
@@ -232,8 +231,8 @@ static void SPKDMPresentDownloadAudioActionsForViewModel(id viewModel) {
     UIViewController *presenter = topMostController();
     if (![SPKAudioDownloadCoordinator bestAudioURLFromMediaObject:viewModel]) {
         SPKNotify(kSPKNotificationDownloadShare,
-                  SPKL(@"GENERAL_AUDIO_PAGE_DOWNLOAD_COULD_NOT_FIND_AUDIO_URL_TEXT"),
-                  SPKL(@"MESSAGES_DIRECT_MESSAGE_MENU_REFRESH_THREAD_TRY_AGAIN_IF_URL_EXPIRED_TEXT"),
+                  @"Could not find audio URL",
+                  @"Refresh the thread and try again if the URL expired.",
                   @"error_filled",
                   SPKNotificationToneError);
         return;
@@ -246,12 +245,12 @@ static void SPKDMPresentDownloadAudioActionsForViewModel(id viewModel) {
                                                             style:SPKIGAlertActionStyleDefault
                                                           handler:handler]];
     }
-    [alertActions addObject:[SPKIGAlertAction actionWithTitle:SPKL(@"ALERT_ACTION_CANCEL")
+    [alertActions addObject:[SPKIGAlertAction actionWithTitle:@"Cancel"
                                                         style:SPKIGAlertActionStyleCancel
                                                       handler:nil]];
 
     [SPKIGAlertPresenter presentActionSheetFromViewController:presenter
-                                                        title:SPKL(@"MESSAGES_DIRECT_MESSAGE_MENU_AUDIO_TITLE")
+                                                        title:@"Audio"
                                                       message:nil
                                                       actions:[alertActions copy]];
 }
@@ -265,7 +264,7 @@ static id SPKDMDownloadAudioMenuItemForViewModel(id viewModel) {
         return nil;
 
     __strong id capturedViewModel = viewModel;
-    return SPKDMMenuItem(SPKL(@"MESSAGES_DIRECT_MESSAGE_MENU_AUDIO_ACTIONS_ACTION"), [SPKAssetUtils instagramIconNamed:@"action" pointSize:24.0], ^(__unused id item) {
+    return SPKDMMenuItem(@"Audio Actions", [SPKAssetUtils instagramIconNamed:@"action" pointSize:24.0], ^(__unused id item) {
         SPKDMPresentDownloadAudioActionsForViewModel(capturedViewModel);
     });
 }
@@ -278,7 +277,7 @@ static id SPKDMPrismAudioDownloadElement(id templateElement, id viewModel) {
     // Preferred shape: the actions expand in place, the way IG's own "More" row
     // does, instead of covering the thread with an action sheet.
     id submenu = SPKDirectPrismSubmenuElement(templateElement,
-                                              SPKL(@"MESSAGES_DIRECT_MESSAGE_MENU_AUDIO_ACTIONS_ACTION"),
+                                              @"Audio Actions",
                                               [SPKAssetUtils instagramIconNamed:@"action" pointSize:24.0],
                                               SPKDMAudioActionsForViewModel(viewModel));
     if (submenu)
@@ -300,7 +299,7 @@ static id SPKDMPrismAudioDownloadElement(id templateElement, id viewModel) {
         SPKDMPresentDownloadAudioActionsForViewModel(capturedViewModel);
     };
 
-    id builder = ((id (*)(id, SEL, id))objc_msgSend)([builderClass alloc], initSelector, SPKL(@"MESSAGES_DIRECT_MESSAGE_MENU_AUDIO_ACTIONS_ACTION"));
+    id builder = ((id (*)(id, SEL, id))objc_msgSend)([builderClass alloc], initSelector, @"Audio Actions");
     builder = ((id (*)(id, SEL, id))objc_msgSend)(builder, imageSelector, [SPKAssetUtils instagramIconNamed:@"action" pointSize:24.0]);
     builder = ((id (*)(id, SEL, id))objc_msgSend)(builder, handlerSelector, handler);
     id menuItem = ((id (*)(id, SEL))objc_msgSend)(builder, buildSelector);
@@ -323,9 +322,9 @@ static id SPKDMPrismAudioDownloadElement(id templateElement, id viewModel) {
 // The three audio sources as submenu rows, each opening its picker directly.
 static NSArray<SPKDirectMenuAction *> *SPKDMAudioUploadSourceActionsForComposer(id composer, id senderTarget) {
     NSArray<NSArray *> *specs = @[
-        @[ SPKL(@"ALERT_ACTION_SELECT_PHOTOS"), @"photo", @(SPKAudioDMUploadSourcePhotos) ],
-        @[ SPKL(@"ALERT_ACTION_SELECT_GALLERY"), @"sparkle_gallery", @(SPKAudioDMUploadSourceGallery) ],
-        @[ SPKL(@"ALERT_ACTION_SELECT_FILES"), @"folder", @(SPKAudioDMUploadSourceFiles) ],
+        @[ @"Select from Photos", @"photo", @(SPKAudioDMUploadSourcePhotos) ],
+        @[ @"Select from Gallery", @"sparkle_gallery", @(SPKAudioDMUploadSourceGallery) ],
+        @[ @"Select from Files", @"folder", @(SPKAudioDMUploadSourceFiles) ],
     ];
 
     __weak id weakComposer = composer;
@@ -366,12 +365,12 @@ static NSArray *SPKDMPrismUploadElementsForComposer(id composer, id templateElem
         // The source picker is a submenu where the menu supports one, so choosing
         // a source no longer costs an extra action sheet.
         id audioElement = SPKDirectPrismSubmenuElement(templateElement,
-                                                       SPKL(@"MESSAGES_AUDIO_UPLOAD_AUDIO_TITLE"),
+                                                       @"Upload Audio",
                                                        [SPKAssetUtils instagramIconNamed:@"audio_upload" pointSize:24.0],
                                                        SPKDMAudioUploadSourceActionsForComposer(composer, senderTarget));
         if (!audioElement) {
             audioElement = SPKDirectPrismMenuElement(templateElement,
-                                                SPKL(@"MESSAGES_AUDIO_UPLOAD_AUDIO_TITLE"),
+                                                @"Upload Audio",
                                                 [SPKAssetUtils instagramIconNamed:@"audio_upload"
                                                                         pointSize:24.0],
                                                 ^{
@@ -396,7 +395,7 @@ static NSArray *SPKDMPrismUploadElementsForComposer(id composer, id templateElem
         [SPKMediaDMUploadCoordinator senderTargetSupportsMediaUpload:senderTarget]) {
         __weak id weakComposer = composer;
         id mediaElement = SPKDirectPrismMenuElement(templateElement,
-                                                SPKL(@"MESSAGES_DIRECT_MESSAGE_MENU_UPLOAD_PHOTO_TEXT"),
+                                                @"Upload Photo",
                                                 [SPKAssetUtils instagramIconNamed:@"photo"
                                                                         pointSize:24.0],
                                                 ^{

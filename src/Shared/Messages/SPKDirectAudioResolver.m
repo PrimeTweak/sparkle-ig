@@ -1,5 +1,4 @@
 #import "SPKDirectAudioResolver.h"
-#import "SPKStrings.h"
 
 #import <objc/message.h>
 #import <objc/runtime.h>
@@ -385,7 +384,7 @@ SPKAudioItem *SPKDirectAudioItemForView(UIView *view, SPKAudioSource source) {
 void SPKDirectPresentAudioActions(UIView *view, SPKAudioSource source) {
     SPKAudioItem *item = SPKDirectAudioItemForView(view, source);
     if (!item) {
-        SPKNotify(kSPKNotificationDownloadShare, SPKL(@"GENERAL_AUDIO_PAGE_DOWNLOAD_COULD_NOT_FIND_AUDIO_URL_TEXT"), SPKL(@"MESSAGES_DIRECT_MESSAGE_MENU_REFRESH_THREAD_TRY_AGAIN_IF_URL_EXPIRED_TEXT"), @"error_filled", SPKNotificationToneError);
+        SPKNotify(kSPKNotificationDownloadShare, @"Could not find audio URL", @"Refresh the thread and try again if the URL expired.", @"error_filled", SPKNotificationToneError);
         return;
     }
 
@@ -397,35 +396,35 @@ void SPKDirectPresentAudioActions(UIView *view, SPKAudioSource source) {
 
     UIViewController *presenter = [SPKUtils viewControllerForAncestralView:view] ?: topMostController();
     [SPKIGAlertPresenter presentActionSheetFromViewController:presenter
-                                                        title:SPKL(@"MESSAGES_DIRECT_MESSAGE_MENU_AUDIO_TITLE")
+                                                        title:@"Audio"
                                                       message:nil
                                                       actions:@[
-                                                          [SPKIGAlertAction actionWithTitle:SPKL(@"ALERT_ACTION_SAVE_AUDIO_FILES")
+                                                          [SPKIGAlertAction actionWithTitle:@"Save Audio to Files"
                                                                                       style:SPKIGAlertActionStyleDefault
                                                                                     handler:^{
                                                                                         [SPKAudioDownloadCoordinator performAction:SPKAudioActionSaveToFiles item:item presenter:presenter sourceView:view metadata:metadata notificationIdentifier:kSPKNotificationDownloadAudio];
                                                                                     }],
-                                                          [SPKIGAlertAction actionWithTitle:SPKL(@"ALERT_ACTION_SHARE_AUDIO")
+                                                          [SPKIGAlertAction actionWithTitle:@"Share Audio"
                                                                                       style:SPKIGAlertActionStyleDefault
                                                                                     handler:^{
                                                                                         [SPKAudioDownloadCoordinator performAction:SPKAudioActionConvertAndShare item:item presenter:presenter sourceView:view metadata:metadata notificationIdentifier:kSPKNotificationDownloadAudioShare];
                                                                                     }],
-                                                          [SPKIGAlertAction actionWithTitle:SPKL(@"ALERT_ACTION_SAVE_AUDIO_GALLERY")
+                                                          [SPKIGAlertAction actionWithTitle:@"Save Audio to Gallery"
                                                                                       style:SPKIGAlertActionStyleDefault
                                                                                     handler:^{
                                                                                         [SPKAudioDownloadCoordinator performAction:SPKAudioActionConvertAndSaveToGallery item:item presenter:presenter sourceView:view metadata:metadata notificationIdentifier:kSPKNotificationDownloadAudioGallery];
                                                                                     }],
-                                                          [SPKIGAlertAction actionWithTitle:SPKL(@"ALERT_ACTION_PLAY_AUDIO")
+                                                          [SPKIGAlertAction actionWithTitle:@"Play Audio"
                                                                                       style:SPKIGAlertActionStyleDefault
                                                                                     handler:^{
                                                                                         [SPKAudioDownloadCoordinator performAction:SPKAudioActionPlay item:item presenter:presenter sourceView:view metadata:metadata notificationIdentifier:kSPKNotificationPlayAudio];
                                                                                     }],
-                                                          [SPKIGAlertAction actionWithTitle:SPKL(@"ALERT_ACTION_COPY_AUDIO_DOWNLOAD_URL")
+                                                          [SPKIGAlertAction actionWithTitle:@"Copy Audio Download URL"
                                                                                       style:SPKIGAlertActionStyleDefault
                                                                                     handler:^{
                                                                                         [SPKAudioDownloadCoordinator performAction:SPKAudioActionCopyURL item:item presenter:presenter sourceView:view metadata:metadata notificationIdentifier:kSPKNotificationCopyAudioURL];
                                                                                     }],
-                                                          [SPKIGAlertAction actionWithTitle:SPKL(@"ALERT_ACTION_CANCEL")
+                                                          [SPKIGAlertAction actionWithTitle:@"Cancel"
                                                                                       style:SPKIGAlertActionStyleCancel
                                                                                     handler:nil]
                                                       ]];

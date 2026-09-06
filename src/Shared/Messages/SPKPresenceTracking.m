@@ -1,5 +1,4 @@
 #import "SPKPresenceTracking.h"
-#import "SPKStrings.h"
 
 #import "../../Networking/SPKInstagramAPI.h"
 #import "../../Utils.h"
@@ -100,7 +99,7 @@ SPKAutoSaveFilterConfig *SPKPresenceFilterConfig(void) {
         config.includedKey = @"msgs_presence_included";
         config.identityField = @"pk";
         config.sortField = @"username";
-        config.subjectPlural = SPKL(@"SETTINGS_TOPIC_SETTINGS_SUPPORT_USERS_TEXT");
+        config.subjectPlural = @"Users";
         config.ruleNotificationIdentifier = kSPKNotificationPresenceUserRule;
         config.alwaysAccountScopedLists = YES;
     });
@@ -117,7 +116,7 @@ BOOL SPKPresenceAllUsersMode(void) {
 }
 
 NSString *SPKPresenceListTitle(void) {
-    return SPKL(@"MESSAGES_ACTIVITY_TRACKED_USERS_TITLE");
+    return @"Tracked Users";
 }
 
 NSArray<NSDictionary *> *SPKPresenceUserList(void) {
@@ -134,9 +133,9 @@ BOOL SPKPresenceAppliesToUser(NSString *pk) {
 
 NSString *SPKPresenceSettingsSummary(void) {
     if (!SPKPresenceNotificationsEnabled())
-        return SPKL(@"MENU_OFF");
+        return @"Off";
     NSUInteger count = SPKPresenceUserList().count;
-    return [NSString stringWithFormat:SPKL(@"MESSAGES_ACTIVITY_SUMMARY_TRACKED_COUNT"), (unsigned long)count];
+    return [NSString stringWithFormat:@"%lu Tracked", (unsigned long)count];
 }
 
 void SPKPresenceToggleForPK(NSString *pk, NSString *username, NSString *fullName, NSString *profilePicUrl) {
@@ -173,7 +172,7 @@ static NSString *SPKPresenceDisplayNameForPK(NSString *pk) {
         break;
     }
     NSString *resolved = spkDirectUserResolverUsernameForPK(pk);
-    return resolved.length > 0 ? [@"@" stringByAppendingString:resolved] : SPKL(@"MESSAGES_ACTIVITY_FALLBACK_NAME");
+    return resolved.length > 0 ? [@"@" stringByAppendingString:resolved] : @"Someone";
 }
 
 // The pill says "@user is online" as one short line, but a system notification is
@@ -195,7 +194,7 @@ static NSString *SPKPresenceNotificationNameForPK(NSString *pk) {
         break;
     }
     NSString *resolved = spkDirectUserResolverUsernameForPK(pk);
-    return resolved.length > 0 ? [@"@" stringByAppendingString:resolved] : SPKL(@"MESSAGES_ACTIVITY_FALLBACK_NAME");
+    return resolved.length > 0 ? [@"@" stringByAppendingString:resolved] : @"Someone";
 }
 
 #pragma mark - Notification delivery
@@ -248,13 +247,13 @@ static NSString *SPKPresenceGroupName(SPKDirectThreadContext *context) {
     if (!context.isGroup)
         return nil;
     NSString *name = SPKDirectDisplayNameForThreadContext(context);
-    return name.length > 0 ? name : SPKL(@"MESSAGES_ACTIVITY_GROUP_CHAT_FALLBACK_NAME");
+    return name.length > 0 ? name : @"Group chat";
 }
 
 static void SPKPresenceNotifyTyping(NSString *pk, NSString *threadID) {
-    NSString *pillTitle = [NSString stringWithFormat:SPKL(@"MESSAGES_ACTIVITY_TYPING_PILL_TITLE"), SPKPresenceDisplayNameForPK(pk)];
+    NSString *pillTitle = [NSString stringWithFormat:@"%@ is typing...", SPKPresenceDisplayNameForPK(pk)];
     NSString *name = SPKPresenceNotificationNameForPK(pk);
-    NSString *body = SPKL(@"MESSAGES_ACTIVITY_TYPING_NOTIFICATION_BODY");
+    NSString *body = @"Is typing...";
 
     dispatch_async(dispatch_get_main_queue(), ^{
         SPKPresenceResolveThreadContext(threadID, nil, ^(SPKDirectThreadContext *context) {
@@ -270,7 +269,7 @@ static void SPKPresenceNotifyTyping(NSString *pk, NSString *threadID) {
 }
 
 static void SPKPresenceNotifyRead(NSString *pk, NSString *threadID, id applicator) {
-    NSString *pillTitle = [NSString stringWithFormat:SPKL(@"MESSAGES_ACTIVITY_READ_PILL_TITLE"), SPKPresenceDisplayNameForPK(pk)];
+    NSString *pillTitle = [NSString stringWithFormat:@"%@ read your message", SPKPresenceDisplayNameForPK(pk)];
     NSString *name = SPKPresenceNotificationNameForPK(pk);
 
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -281,17 +280,17 @@ static void SPKPresenceNotifyRead(NSString *pk, NSString *threadID, id applicato
                 return;
             }
             if ([SPKUtils getBoolPref:kSPKPresenceMirrorKey])
-                SPKPresencePostLocalNotification(name, groupName, SPKL(@"MESSAGES_ACTIVITY_READ_NOTIFICATION_BODY"), context.isGroup ? threadID : nil);
+                SPKPresencePostLocalNotification(name, groupName, @"Read your message", context.isGroup ? threadID : nil);
         });
     });
 }
 
 static void SPKPresenceNotify(NSString *pk, BOOL isActive) {
     NSString *displayName = SPKPresenceDisplayNameForPK(pk);
-    NSString *pillTitle = isActive ? [NSString stringWithFormat:SPKL(@"MESSAGES_ACTIVITY_ONLINE_PILL_TITLE"), displayName]
-                                   : [NSString stringWithFormat:SPKL(@"MESSAGES_ACTIVITY_OFFLINE_PILL_TITLE"), displayName];
+    NSString *pillTitle = isActive ? [NSString stringWithFormat:@"%@ is online", displayName]
+                                   : [NSString stringWithFormat:@"%@ went offline", displayName];
     NSString *name = SPKPresenceNotificationNameForPK(pk);
-    NSString *body = isActive ? SPKL(@"MESSAGES_ACTIVITY_ONLINE_NOTIFICATION_BODY") : SPKL(@"MESSAGES_ACTIVITY_OFFLINE_NOTIFICATION_BODY");
+    NSString *body = isActive ? @"Is online" : @"Went offline";
     NSString *identifier = isActive ? kSPKNotificationPresenceOnline : kSPKNotificationPresenceOffline;
     NSString *icon = isActive ? @"circle_check_filled" : @"circle_xmark_filled";
 
@@ -1193,7 +1192,7 @@ NSString *SPKPresenceDiagnosticsText(void) {
 
     NSArray<NSDictionary *> *tracked = SPKPresenceUserList();
     [lines addObject:[NSString stringWithFormat:@"Tracked users: %lu", (unsigned long)tracked.count]];
-    [lines addObject:SPKL(@"MESSAGES_ACTIVITY_DIAGNOSTICS_FOOTER")];
+    [lines addObject:@"Live snapshot: Refresh rereads Instagram's current store. Clear resets Sparkle's transition and cooldown memory."];
     [lines addObject:[NSString stringWithFormat:@"\n%@", SPKAccurateActiveStatusDiagnosticsText()]];
 
     id session = [SPKUtils activeUserSession];
@@ -1267,7 +1266,7 @@ NSString *SPKPresenceDiagnosticsText(void) {
     self = [super init];
     if (!self)
         return nil;
-    self.title = SPKL(@"MESSAGES_ACTIVITY_DIAGNOSTICS_TITLE");
+    self.title = @"Activity Diagnostics";
     return self;
 }
 
@@ -1293,11 +1292,11 @@ NSString *SPKPresenceDiagnosticsText(void) {
     ]];
 
     UIBarButtonItem *refreshItem = SPKMediaChromeTopBarButtonItem(@"arrow_ccw", self, @selector(refreshTapped));
-    refreshItem.accessibilityLabel = SPKL(@"MESSAGES_ACTIVITY_DIAGNOSTICS_REFRESH_ACCESSIBILITY_LABEL");
+    refreshItem.accessibilityLabel = @"Refresh";
     UIBarButtonItem *copyItem = SPKMediaChromeTopBarButtonItem(@"copy", self, @selector(copyTapped));
-    copyItem.accessibilityLabel = SPKL(@"MESSAGES_ACTIVITY_DIAGNOSTICS_COPY_ACCESSIBILITY_LABEL");
+    copyItem.accessibilityLabel = @"Copy";
     UIBarButtonItem *clearItem = SPKMediaChromeTopBarButtonItem(@"trash", self, @selector(clearTapped));
-    clearItem.accessibilityLabel = SPKL(@"MESSAGES_ACTIVITY_DIAGNOSTICS_CLEAR_ACCESSIBILITY_LABEL");
+    clearItem.accessibilityLabel = @"Reset tracking state";
     clearItem.tintColor = [SPKUtils SPKColor_InstagramDestructive];
     SPKMediaChromeSetTrailingTopBarItems(self.navigationItem, @[ clearItem, copyItem, refreshItem ]);
 }
@@ -1318,22 +1317,22 @@ NSString *SPKPresenceDiagnosticsText(void) {
 
 - (void)refreshTapped {
     [self reloadContent];
-    SPKNotify(kSPKNotificationPresenceUserRule, SPKL(@"MESSAGES_ACTIVITY_DIAGNOSTICS_REFRESHED_TOAST"), nil, @"circle_check_filled", SPKNotificationToneSuccess);
+    SPKNotify(kSPKNotificationPresenceUserRule, @"Diagnostics refreshed", nil, @"circle_check_filled", SPKNotificationToneSuccess);
 }
 
 - (void)copyTapped {
     if (_textView.text.length == 0)
         return;
     UIPasteboard.generalPasteboard.string = _textView.text;
-    SPKNotify(kSPKNotificationPresenceUserRule, SPKL(@"MESSAGES_ACTIVITY_DIAGNOSTICS_COPIED_TOAST"), nil, @"copy_filled", SPKNotificationToneSuccess);
+    SPKNotify(kSPKNotificationPresenceUserRule, @"Diagnostics copied", nil, @"copy_filled", SPKNotificationToneSuccess);
 }
 
 - (void)clearTapped {
     SPKPresenceResetState();
     [self reloadContent];
     SPKNotify(kSPKNotificationPresenceUserRule,
-              SPKL(@"MESSAGES_ACTIVITY_DIAGNOSTICS_CLEARED_TOAST_TITLE"),
-              SPKL(@"MESSAGES_ACTIVITY_DIAGNOSTICS_CLEARED_TOAST_MESSAGE"),
+              @"Tracking state cleared",
+              @"Transition memory and cooldowns were reset. Instagram's live presence data was kept.",
               @"circle_check_filled",
               SPKNotificationToneSuccess);
 }
@@ -1372,13 +1371,13 @@ NSString *SPKPresenceCurrentChatActionTitle(SPKDirectThreadContext *context) {
     if (!partner)
         return nil;
     NSString *pk = SPKStringFromValue(partner[@"pk"]);
-    return SPKPresenceAppliesToUser(pk) ? SPKL(@"MESSAGES_ACTIVITY_STOP_TRACKING_TITLE") : SPKL(@"MESSAGES_ACTIVITY_TRACK_TITLE");
+    return SPKPresenceAppliesToUser(pk) ? @"Stop Tracking Activity" : @"Track Activity";
 }
 
 void SPKPresencePresentChatRuleToggle(SPKDirectThreadContext *context) {
     NSDictionary *partner = SPKPresencePartnerForContext(context);
     if (!partner) {
-        SPKNotify(kSPKNotificationPresenceUserRule, SPKL(@"MESSAGES_ACTIVITY_USER_NOT_FOUND_TOAST"), nil, @"error_filled", SPKNotificationToneError);
+        SPKNotify(kSPKNotificationPresenceUserRule, @"User not found", nil, @"error_filled", SPKNotificationToneError);
         return;
     }
 
@@ -1387,20 +1386,20 @@ void SPKPresencePresentChatRuleToggle(SPKDirectThreadContext *context) {
     NSString *fullName = SPKStringFromValue(partner[@"fullName"]);
     NSString *profilePicUrl = SPKStringFromValue(partner[@"profilePicUrl"]);
     NSString *name = username.length > 0 ? [@"@" stringByAppendingString:username]
-                                         : (fullName.length > 0 ? fullName : SPKL(@"MESSAGES_ACTIVITY_FALLBACK_PARTNER_NAME"));
+                                         : (fullName.length > 0 ? fullName : @"this user");
 
     BOOL trackedBefore = SPKPresenceAppliesToUser(pk);
-    NSString *title = trackedBefore ? SPKL(@"MESSAGES_ACTIVITY_STOP_TRACKING_TITLE") : SPKL(@"MESSAGES_ACTIVITY_TRACK_TITLE");
+    NSString *title = trackedBefore ? @"Stop Tracking Activity" : @"Track Activity";
     NSString *message = trackedBefore
-                            ? [NSString stringWithFormat:SPKL(@"MESSAGES_ACTIVITY_STOP_CONFIRM_MESSAGE"), name]
-                            : [NSString stringWithFormat:SPKL(@"MESSAGES_ACTIVITY_START_CONFIRM_MESSAGE"), name];
+                            ? [NSString stringWithFormat:@"Do you want to stop getting activity notifications for %@?", name]
+                            : [NSString stringWithFormat:@"Do you want to get activity notifications for %@?", name];
 
     [SPKUtils
         showConfirmation:^{
             SPKPresenceToggleForPK(pk, username, fullName, profilePicUrl);
             SPKNotify(kSPKNotificationPresenceUserRule,
-                      trackedBefore ? [NSString stringWithFormat:SPKL(@"MESSAGES_ACTIVITY_TRACKING_OFF_TOAST"), name]
-                                    : [NSString stringWithFormat:SPKL(@"MESSAGES_ACTIVITY_TRACKING_ON_TOAST"), name],
+                      trackedBefore ? [NSString stringWithFormat:@"Activity tracking off for %@", name]
+                                    : [NSString stringWithFormat:@"Activity tracking on for %@", name],
                       SPKPresenceListTitle(),
                       @"circle_check_filled",
                       SPKNotificationToneSuccess);
@@ -1419,17 +1418,17 @@ void SPKPresencePresentChatRuleToggle(SPKDirectThreadContext *context) {
 - (instancetype)init {
     if ((self = [super initWithConfig:SPKPresenceFilterConfig()])) {
         self.showsAddButton = YES;
-        self.title = SPKL(@"MESSAGES_ACTIVITY_TRACKED_USERS_TITLE");
-        self.infoText = SPKL(@"MESSAGES_ACTIVITY_LIST_INFO_TEXT");
-        self.emptyTitle = SPKL(@"MESSAGES_ACTIVITY_EMPTY_TITLE");
-        self.emptySubtitle = SPKL(@"MESSAGES_ACTIVITY_EMPTY_SUBTITLE");
+        self.title = @"Tracked Users";
+        self.infoText = @"Only users in this list generate activity notifications. This list belongs to the current Instagram account and is never shared with your other accounts.";
+        self.emptyTitle = @"No users yet";
+        self.emptySubtitle = @"Add users you want to be notified about, or use Track Activity inside a chat.";
     }
     return self;
 }
 
 - (void)listDidUpdateItemCount:(NSUInteger)count {
-    self.title = count == 0 ? SPKL(@"MESSAGES_ACTIVITY_TRACKED_USERS_TITLE")
-                            : [NSString stringWithFormat:SPKL(@"MESSAGES_ACTIVITY_TRACKED_USERS_COUNT_TITLE"), (unsigned long)count, count == 1 ? SPKL(@"MESSAGES_ACTIVITY_UNIT_USER_SINGULAR") : SPKL(@"SETTINGS_TOPIC_SETTINGS_SUPPORT_USERS_TEXT")];
+    self.title = count == 0 ? @"Tracked Users"
+                            : [NSString stringWithFormat:@"%lu Tracked %@", (unsigned long)count, count == 1 ? @"User" : @"Users"];
 }
 
 - (NSString *)removalDisplayNameForEntry:(NSDictionary *)entry {
@@ -1449,7 +1448,7 @@ void SPKPresencePresentChatRuleToggle(SPKDirectThreadContext *context) {
 
         SPKUserListItem *item = [SPKUserListItem new];
         item.pk = pk;
-        item.title = username.length ? [@"@" stringByAppendingString:username] : SPKL(@"MESSAGES_DELETED_MESSAGES_MODELS_UNKNOWN_USER_TEXT");
+        item.title = username.length ? [@"@" stringByAppendingString:username] : @"Unknown user";
         item.subtitle = fullName.length ? fullName : nil;
         item.avatarURLString = profilePicUrl;
         item.representedObject = entry;
@@ -1460,21 +1459,21 @@ void SPKPresencePresentChatRuleToggle(SPKDirectThreadContext *context) {
 
 - (void)presentError:(NSString *)message {
     [SPKIGAlertPresenter presentAlertFromViewController:self
-                                                  title:SPKL(@"INSTANTS_INSTANTS_AUTO_SAVE_UNABLE_ADD_USER_TEXT")
+                                                  title:@"Unable to Add User"
                                                 message:message
-                                                actions:@[ [SPKIGAlertAction actionWithTitle:SPKL(@"ALERT_ACTION_OK") style:SPKIGAlertActionStyleCancel handler:nil] ]];
+                                                actions:@[ [SPKIGAlertAction actionWithTitle:@"OK" style:SPKIGAlertActionStyleCancel handler:nil] ]];
 }
 
 - (void)didTapAdd {
     __weak typeof(self) weakSelf = self;
     [SPKIGAlertPresenter presentTextInputAlertFromViewController:self
-                                                           title:SPKL(@"INSTANTS_INSTANTS_AUTO_SAVE_ADD_USER_TEXT")
-                                                         message:SPKL(@"MESSAGES_ACTIVITY_ADD_USER_PROMPT_MESSAGE")
-                                                     placeholder:SPKL(@"INSTANTS_INSTANTS_AUTO_SAVE_USERNAME_TEXT")
+                                                           title:@"Add User"
+                                                         message:@"Enter the Instagram username you want activity notifications for."
+                                                     placeholder:@"username"
                                                      initialText:nil
                                                  autocapitalized:NO
-                                                    confirmTitle:SPKL(@"PROFILE_PROFILE_ANALYZER_LIST_SEARCH_TEXT")
-                                                     cancelTitle:SPKL(@"VC_BTN_CANCEL")
+                                                    confirmTitle:@"Search"
+                                                     cancelTitle:@"Cancel"
                                                     confirmStyle:SPKIGAlertActionStyleDefault
                                                     confirmBlock:^(NSString *text) {
                                                         [weakSelf lookupUsername:text];
@@ -1502,13 +1501,13 @@ void SPKPresencePresentChatRuleToggle(SPKDirectThreadContext *context) {
                                     if (![user isKindOfClass:NSDictionary.class])
                                         user = response[@"user"];
                                     if (![user isKindOfClass:NSDictionary.class] || error) {
-                                        [strongSelf presentError:[NSString stringWithFormat:SPKL(@"INSTANTS_INSTANTS_AUTO_SAVE_USER_VALUE_NOT_FOUND_FORMAT"), username]];
+                                        [strongSelf presentError:[NSString stringWithFormat:@"User '%@' was not found.", username]];
                                         return;
                                     }
 
                                     NSString *pk = SPKStringFromValue(user[@"id"] ?: user[@"pk"]);
                                     if (pk.length == 0) {
-                                        [strongSelf presentError:SPKL(@"MESSAGES_DIRECT_AUTO_SAVE_COULD_NOT_RESOLVE_USER_S_INSTAGRAM_ID_TEXT")];
+                                        [strongSelf presentError:@"Could not resolve this user's Instagram ID."];
                                         return;
                                     }
                                     NSString *resolvedUsername = SPKStringFromValue(user[@"username"]) ?: username;
@@ -1520,13 +1519,13 @@ void SPKPresencePresentChatRuleToggle(SPKDirectThreadContext *context) {
                                                             : [@"@" stringByAppendingString:resolvedUsername];
 
                                     [SPKIGAlertPresenter presentAlertFromViewController:strongSelf
-                                                                                  title:SPKL(@"MESSAGES_ACTIVITY_TRACK_ACTIVITY_CONFIRM_TITLE")
+                                                                                  title:@"Track Activity?"
                                                                                 message:message
                                                                                 actions:@[
-                                                                                    [SPKIGAlertAction actionWithTitle:SPKL(@"ALERT_ACTION_CANCEL")
+                                                                                    [SPKIGAlertAction actionWithTitle:@"Cancel"
                                                                                                                 style:SPKIGAlertActionStyleCancel
                                                                                                               handler:nil],
-                                                                                    [SPKIGAlertAction actionWithTitle:SPKL(@"ALERT_ACTION_ADD")
+                                                                                    [SPKIGAlertAction actionWithTitle:@"Add"
                                                                                                                 style:SPKIGAlertActionStyleDefault
                                                                                                               handler:^{
                                                                                                                   [strongSelf addResolvedUserPK:pk
@@ -1543,7 +1542,7 @@ void SPKPresencePresentChatRuleToggle(SPKDirectThreadContext *context) {
         return;
     SPKPresenceToggleForPK(pk, username, fullName, profilePicUrl);
     SPKNotify(kSPKNotificationPresenceUserRule,
-              [NSString stringWithFormat:SPKL(@"INSTANTS_INSTANTS_AUTO_SAVE_ADDED_VALUE_FORMAT"), username],
+              [NSString stringWithFormat:@"Added @%@", username],
               SPKPresenceListTitle(),
               @"circle_check_filled",
               SPKNotificationToneSuccess);

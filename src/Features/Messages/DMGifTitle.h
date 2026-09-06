@@ -11,7 +11,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// The Direct menu is built from a fixed element array, so the row's text has to
 /// be known up front. `SPKDMGifTitleNoteMenuViewModel` records the message being
 /// long-pressed while IG assembles its menu configuration, and
-/// `SPKDMGifTitleElementsForTemplate` then contributes the rows.
+/// `SPKDMGifTitleElementsForMenu` then contributes the rows.
 
 /// YES when the DM GIF title pref is on.
 FOUNDATION_EXPORT BOOL SPKDMGifTitleEnabled(void);

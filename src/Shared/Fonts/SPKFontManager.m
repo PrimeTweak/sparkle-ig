@@ -1,4 +1,3 @@
-#import "SPKStrings.h"
 #import "SPKFontManager.h"
 
 #import <CoreText/CoreText.h>
@@ -22,7 +21,7 @@ typedef NS_ENUM(NSInteger, SPKFontError) {
 static NSError *SPKFontMakeError(SPKFontError code, NSString *message) {
     return [NSError errorWithDomain:kSPKFontErrorDomain
                                code:code
-                           userInfo:@{NSLocalizedDescriptionKey : message ?: SPKL(@"FONT_ERROR_UNKNOWN")}];
+                           userInfo:@{NSLocalizedDescriptionKey : message ?: @"Unknown font error"}];
 }
 
 @implementation SPKFontFile
@@ -109,28 +108,28 @@ static NSString *SPKFontDerivedStyleName(CGFloat weight, BOOL italic) {
     BOOL isRegular = NO;
     NSString *name;
     if (weight <= -0.6)
-        name = SPKL(@"FONT_STYLE_ULTRA_LIGHT");
+        name = @"Ultra Light";
     else if (weight <= -0.35)
-        name = SPKL(@"FONT_STYLE_THIN");
+        name = @"Thin";
     else if (weight <= -0.15)
-        name = SPKL(@"FONT_STYLE_LIGHT");
+        name = @"Light";
     else if (weight <= 0.1) {
-        name = SPKL(@"FONT_STYLE_REGULAR");
+        name = @"Regular";
         isRegular = YES;
     } else if (weight <= 0.25)
-        name = SPKL(@"FONT_STYLE_MEDIUM");
+        name = @"Medium";
     else if (weight <= 0.35)
-        name = SPKL(@"FONT_STYLE_SEMIBOLD");
+        name = @"Semibold";
     else if (weight <= 0.5)
-        name = SPKL(@"FONT_STYLE_BOLD");
+        name = @"Bold";
     else if (weight <= 0.6)
-        name = SPKL(@"FONT_STYLE_HEAVY");
+        name = @"Heavy";
     else
-        name = SPKL(@"FONT_STYLE_BLACK");
+        name = @"Black";
 
     if (!italic)
         return name;
-    return isRegular ? SPKL(@"FONT_STYLE_ITALIC") : [NSString stringWithFormat:SPKL(@"FONT_STYLE_ITALIC_VARIANT_FORMAT"), name];
+    return isRegular ? @"Italic" : [NSString stringWithFormat:@"%@ Italic", name];
 }
 
 /// Normalized weight (-1…1), slant, and declared style name of a registered face,
@@ -360,7 +359,7 @@ static NSString *SPKFontBestFaceInFamily(NSString *family, CGFloat weight, BOOL 
     @try {
         if (!SPKFontPathHasFontExtension(url.path)) {
             if (error)
-                *error = SPKFontMakeError(SPKFontErrorNotAFont, SPKL(@"FONT_ERROR_NOT_A_FONT"));
+                *error = SPKFontMakeError(SPKFontErrorNotAFont, @"Pick an .otf, .ttf, or .ttc file.");
             return nil;
         }
 
@@ -368,7 +367,7 @@ static NSString *SPKFontBestFaceInFamily(NSString *family, CGFloat weight, BOOL 
         NSString *postScript = nil;
         if (!SPKFontInspectFile(url, &family, &postScript)) {
             if (error)
-                *error = SPKFontMakeError(SPKFontErrorNotAFont, SPKL(@"FONT_ERROR_UNPARSEABLE"));
+                *error = SPKFontMakeError(SPKFontErrorNotAFont, @"That file is not a font Instagram can load.");
             return nil;
         }
 
@@ -378,7 +377,7 @@ static NSString *SPKFontBestFaceInFamily(NSString *family, CGFloat weight, BOOL 
         if ([NSFileManager.defaultManager fileExistsAtPath:destination]) {
             if (error)
                 *error = SPKFontMakeError(SPKFontErrorAlreadyImported,
-                                          [NSString stringWithFormat:SPKL(@"FONT_ERROR_ALREADY_IMPORTED_FORMAT"), fileName]);
+                                          [NSString stringWithFormat:@"%@ is already imported.", fileName]);
             return nil;
         }
 
@@ -403,7 +402,7 @@ static NSString *SPKFontBestFaceInFamily(NSString *family, CGFloat weight, BOOL 
             [NSFileManager.defaultManager removeItemAtPath:destination error:nil];
             if (error)
                 *error = SPKFontMakeError(SPKFontErrorRegistrationFailed,
-                                          SPKL(@"FONT_ERROR_REGISTRATION_FAILED"));
+                                          @"That font could not be loaded. It may be damaged or protected.");
             return nil;
         }
 

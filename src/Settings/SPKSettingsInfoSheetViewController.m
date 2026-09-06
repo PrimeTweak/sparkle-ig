@@ -1,7 +1,6 @@
 #import "SPKSettingsInfoSheetViewController.h"
 
 #import "SPKSetting.h"
-#import "SPKStrings.h"
 #import "../Shared/UI/SPKMediaChrome.h"
 #import "../Utils.h"
 

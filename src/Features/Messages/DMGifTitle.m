@@ -1,4 +1,3 @@
-#import "SPKStrings.h"
 #import "DMGifTitle.h"
 
 #import <UIKit/UIKit.h>
@@ -17,13 +16,13 @@
 static NSString *const kSPKDMGifTitlePref = @"msgs_gif_title";
 
 static NSString *SPKDMGifTitlePlaceholder(void) {
-    return SPKL(@"MESSAGES_GIF_TITLE_LOOKUP_PLACEHOLDER");
+    return @"Looking up GIF title...";
 }
 /// The placeholder row carries a subtitle purely so the label exists to be
 /// filled with the channel later — a row built without one has no second line
 /// to patch, which would force the author inline where it just truncates.
 static NSString *SPKDMGifTitleSubtitlePlaceholder(void) {
-    return SPKL(@"MESSAGES_GIF_TITLE_TAP_TO_COPY_SUBTITLE");
+    return @"Tap to copy";
 }
 
 static id sSPKDMGifTitleMenuViewModel = nil;
@@ -110,7 +109,7 @@ static UIImage *SPKDMGifTitleIcon(void) {
 
 static void SPKDMGifTitleCopy(NSString *title) {
     UIPasteboard.generalPasteboard.string = title;
-    SPKNotify(kSPKNotificationCopyGIFTitle, SPKL(@"FEED_COMMENT_ACTIONS_GIF_TITLE_COPIED_TITLE"), nil, @"copy_filled", SPKNotificationToneSuccess);
+    SPKNotify(kSPKNotificationCopyGIFTitle, @"GIF title copied", nil, @"copy_filled", SPKNotificationToneSuccess);
 }
 
 /// Row that displays a known title; tapping copies it.
@@ -176,7 +175,7 @@ static id SPKDMGifTitleLookupRow(id templateElement, NSString *identifier) {
         [SPKGiphyMetadataResolver resolveMetadataForGifMediaId:identifier
                                                     completion:^(SPKGiphyMetadata *metadata) {
                                                         if (!metadata) {
-                                                            SPKNotify(kSPKNotificationCopyGIFTitle, SPKL(@"MESSAGES_DMGIF_TITLE_GIF_TITLE_UNAVAILABLE_TITLE"), nil, @"info", SPKNotificationToneError);
+                                                            SPKNotify(kSPKNotificationCopyGIFTitle, @"GIF title unavailable", nil, @"info", SPKNotificationToneError);
                                                             return;
                                                         }
                                                         SPKDMGifTitleCopy(metadata.title);
@@ -226,7 +225,7 @@ NSArray *SPKDMGifTitleElementsForMenu(NSArray *elements) {
     // rewrite the placeholder in place when it lands.
     sSPKDMGifTitlePatchPending = YES;
     [SPKGiphyMetadataResolver resolveMetadataForGifMediaId:identifier completion:^(SPKGiphyMetadata *metadata) {
-        NSString *filledTitle = metadata.title ?: SPKL(@"FEED_COMMENT_ACTIONS_TITLE_UNAVAILABLE_TITLE");
+        NSString *filledTitle = metadata.title ?: @"Title unavailable";
         NSString *filledSubtitle = metadata.author.length > 0
                                        ? [NSString stringWithFormat:@"by %@", metadata.author]
                                        : nil;

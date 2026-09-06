@@ -2,7 +2,6 @@
 
 #import "../../InstagramHeaders.h"
 #import "../../Utils.h"
-#import "SPKStrings.h"
 
 #import <objc/runtime.h>
 
@@ -121,15 +120,15 @@ static long long SPKNativeStateForState(SPKFollowButtonState state) {
 static NSString *SPKFallbackTitleForState(SPKFollowButtonState state) {
     switch (state) {
         case SPKFollowButtonStateFollowing:
-            return SPKL(@"MENU_FOLLOWING");
+            return @"Following";
         case SPKFollowButtonStateRequested:
-            return SPKL(@"COMMON_FOLLOW_BUTTON_REQUESTED");
+            return @"Requested";
         case SPKFollowButtonStateFollowBack:
-            return SPKL(@"COMMON_FOLLOW_BUTTON_FOLLOW_BACK");
+            return @"Follow back";
         case SPKFollowButtonStateNotFollowing:
             break;
     }
-    return SPKL(@"VC_BTN_FOLLOW");
+    return @"Follow";
 }
 
 // MARK: - Public API

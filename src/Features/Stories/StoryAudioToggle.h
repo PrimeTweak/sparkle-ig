@@ -1,0 +1,4 @@
+#import <Foundation/Foundation.h>
+
+FOUNDATION_EXPORT NSNotificationName const SPKStoryAudioTogglePreferenceDidChangeNotification;
+FOUNDATION_EXPORT void SPKInstallStoryAudioToggleHooksIfEnabled(void);

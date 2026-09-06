@@ -1,4 +1,3 @@
-#import "SPKStrings.h"
 #import "SPKFontPickerViewController.h"
 
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -103,7 +102,7 @@ static CGFloat const kSPKFontSpecimenInset = 20.0;
     [_card addSubview:_facesStack];
 
     _hintLabel = [[UILabel alloc] init];
-    _hintLabel.text = SPKL(@"FONT_SPECIMEN_HINT_LABEL");
+    _hintLabel.text = @"Tap to change the sample";
     _hintLabel.textColor = [SPKUtils SPKColor_InstagramTertiaryText];
     _hintLabel.font = [UIFont systemFontOfSize:11.0 weight:UIFontWeightMedium];
     _hintLabel.textAlignment = NSTextAlignmentCenter;
@@ -247,10 +246,10 @@ static NSArray<NSString *> *SPKFontSpecimenSamples(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         samples = @[
-            SPKL(@"FONT_SPECIMEN_SAMPLE_LIKES"),
-            SPKL(@"SETTINGS_FONT_PICKER_QUICK_BROWN_FOX_JUMPED_OVER_LAZY_DOG_TEXT"),
-            SPKL(@"SETTINGS_FONT_PICKER_WEST_QUICKLY_GAVE_BERT_HANDSOME_PRIZES_SIX_JUICY_PLUMS_TEXT"),
-            SPKL(@"SETTINGS_FONT_PICKER_FIVE_SIX_BIG_JET_PLANES_ZOOMED_QUICKLY_TOWER_TEXT"),
+            @"1,234 likes · 12h · 4.2K views · Reply",
+            @"The quick brown fox jumped over the lazy dog.",
+            @"West quickly gave Bert handsome prizes for six juicy plums.",
+            @"Five or six big jet planes zoomed quickly by the tower.",
         ];
     });
     return samples;
@@ -275,7 +274,7 @@ static NSArray<NSString *> *SPKFontSpecimenSamples(void) {
 @implementation SPKFontPickerViewController
 
 - (instancetype)init {
-    return [super initWithTitle:SPKL(@"FONT_APP_FONT_TITLE") sections:@[] reduceMargin:NO];
+    return [super initWithTitle:@"App Font" sections:@[] reduceMargin:NO];
 }
 
 - (void)viewDidLoad {
@@ -294,7 +293,7 @@ static NSArray<NSString *> *SPKFontSpecimenSamples(void) {
     [super setupNavigationItems];
     SPKMediaChromeSetTrailingTopBarItems(self.navigationItem, @[
         SPKMediaChromeTopBarButtonItemWithTint(@"plus", self, @selector(presentImportPicker),
-                                               [SPKUtils SPKColor_InstagramPrimaryText], SPKL(@"FONT_IMPORT_BUTTON_TITLE")),
+                                               [SPKUtils SPKColor_InstagramPrimaryText], @"Import Font"),
     ]);
 }
 
@@ -401,19 +400,19 @@ static NSUInteger const kSPKFontSpecimenFaceLimit = 6;
             UIFont *font = [UIFont fontWithName:face.postScriptName size:17.0];
             if (!font)
                 continue;
-            [titles addObject:face.styleName.length > 0 ? face.styleName : SPKL(@"FONT_STYLE_REGULAR")];
+            [titles addObject:face.styleName.length > 0 ? face.styleName : @"Regular"];
             [fonts addObject:font];
         }
         NSUInteger remaining = faces.count - titles.count;
         if (remaining > 0)
-            overflow = [NSString stringWithFormat:SPKL(@"FONT_SPECIMEN_OVERFLOW_FORMAT"), (unsigned long)remaining,
-                                                  remaining == 1 ? SPKL(@"FONT_SPECIMEN_FACE_SINGULAR") : SPKL(@"FONT_SPECIMEN_FACE_PLURAL")];
+            overflow = [NSString stringWithFormat:@"and %lu more %@", (unsigned long)remaining,
+                                                  remaining == 1 ? @"face" : @"faces"];
     } else {
         // The system font is a single variable face, so there is nothing to list;
         // these are the weights Instagram and Sparkle actually ask it for.
         NSArray<NSString *> *systemTitles = @[
-            SPKL(@"FONT_STYLE_REGULAR"), SPKL(@"FONT_STYLE_MEDIUM"),
-            SPKL(@"FONT_STYLE_BOLD"), SPKL(@"FONT_STYLE_ITALIC")
+            @"Regular", @"Medium",
+            @"Bold", @"Italic"
         ];
         NSArray<NSNumber *> *systemWeights = @[ @(UIFontWeightRegular), @(UIFontWeightMedium),
                                                 @(UIFontWeightBold), @(UIFontWeightRegular) ];
@@ -429,7 +428,7 @@ static NSUInteger const kSPKFontSpecimenFaceLimit = 6;
     }
 
     NSArray<NSString *> *samples = SPKFontSpecimenSamples();
-    [self.specimenView configureWithName:family.length > 0 ? family : SPKL(@"FONT_DEFAULT_ROW_TITLE")
+    [self.specimenView configureWithName:family.length > 0 ? family : @"Default"
                              displayFont:[self fontForFamily:family size:30.0 weight:UIFontWeightSemibold]
                               sampleFont:[self fontForFamily:family size:16.0 weight:UIFontWeightRegular]
                               sampleText:samples[self.sampleIndex % samples.count]
@@ -475,7 +474,7 @@ static NSUInteger const kSPKFontSpecimenFaceLimit = 6;
     for (NSString *key in order) {
         [groups addObject:@{
             @"key" : key,
-            @"title" : key.length > 0 ? key : SPKL(@"FONT_IMPORTED_FILES_UNRECOGNIZED_GROUP_TITLE"),
+            @"title" : key.length > 0 ? key : @"Unrecognized",
             @"files" : [buckets[key] copy],
         }];
     }
@@ -508,7 +507,7 @@ static NSUInteger const kSPKFontSpecimenFaceLimit = 6;
     __weak typeof(self) weakSelf = self;
 
     NSMutableArray<SPKSetting *> *fontRows = [NSMutableArray array];
-    SPKSetting *defaultRow = [SPKSetting buttonCellWithTitle:SPKL(@"FONT_DEFAULT_ROW_TITLE")
+    SPKSetting *defaultRow = [SPKSetting buttonCellWithTitle:@"Default"
                                                     subtitle:@""
                                                         icon:nil
                                                       action:^{
@@ -545,8 +544,8 @@ static NSUInteger const kSPKFontSpecimenFaceLimit = 6;
     }
 
     NSMutableArray *sections = [NSMutableArray array];
-    [sections addObject:SPKTopicSection(SPKL(@"FONT_ROWS_SECTION_HEADER"), fontRows,
-                                        SPKL(@"FONT_ROWS_SECTION_FOOTER"))];
+    [sections addObject:SPKTopicSection(@"Font", fontRows,
+                                        @"Replaces the font across Instagram and Sparkle. Instagram's logo, the story text tool, and numbers that stay column-aligned keep their own fonts.")];
 
     if (self.fileGroups.count > 0) {
         NSMutableArray<SPKSetting *> *fileRows = [NSMutableArray array];
@@ -555,9 +554,9 @@ static NSUInteger const kSPKFontSpecimenFaceLimit = 6;
             NSArray<SPKFontFile *> *files = group[@"files"];
             BOOL expanded = self.expandsGroupsForSearch || [self.expandedGroups containsObject:key];
 
-            NSString *count = files.count == 1 ? SPKL(@"FONT_FILE_COUNT_SINGULAR") : [NSString stringWithFormat:SPKL(@"FONT_FILE_COUNT_PLURAL_FORMAT"), (unsigned long)files.count];
+            NSString *count = files.count == 1 ? @"1 file" : [NSString stringWithFormat:@"%lu files", (unsigned long)files.count];
             SPKSetting *groupRow = [SPKSetting buttonCellWithTitle:group[@"title"]
-                                                          subtitle:[NSString stringWithFormat:SPKL(@"FONT_FILE_COUNT_SIZE_JOINER_FORMAT"), count, [self sizeTextForFiles:files]]
+                                                          subtitle:[NSString stringWithFormat:@"%@ · %@", count, [self sizeTextForFiles:files]]
                                                               icon:nil
                                                             action:^{
                                                                 [weakSelf toggleGroupWithKey:key];
@@ -574,14 +573,14 @@ static NSUInteger const kSPKFontSpecimenFaceLimit = 6;
                                                                 countStyle:NSByteCountFormatterCountStyleFile];
                 NSString *subtitle = file.familyName.length > 0
                                          ? size
-                                         : [NSString stringWithFormat:SPKL(@"FONT_UNUSABLE_FILE_SUBTITLE_FORMAT"), size];
+                                         : [NSString stringWithFormat:@"Not a usable font · %@", size];
                 SPKSetting *row = [SPKSetting staticCellWithTitle:file.fileName subtitle:subtitle icon:nil];
                 row.userInfo = @{@"file" : file, @"indented" : @(YES)};
                 [fileRows addObject:row];
             }
         }
-        [sections addObject:SPKTopicSection(SPKL(@"FONT_IMPORTED_FILES_SECTION_HEADER"), fileRows,
-                                            SPKL(@"FONT_IMPORTED_FILES_FOOTER"))];
+        [sections addObject:SPKTopicSection(@"Imported Files", fileRows,
+                                            @"Tap a family to see its files, and swipe a file to delete it. A family split across several files needs all of them for its weights to work. Files are stored inside Sparkle, so uninstalling removes them.")];
     }
 
     [self replaceSections:sections];
@@ -731,7 +730,7 @@ static NSUInteger const kSPKFontSpecimenFaceLimit = 6;
                                               }];
     deleteAction.image = [SPKAssetUtils menuIconNamed:@"trash"];
     deleteAction.backgroundColor = [SPKUtils SPKColor_InstagramDestructive];
-    deleteAction.accessibilityLabel = SPKL(@"FONT_DELETE_FILE_ACCESSIBILITY_LABEL");
+    deleteAction.accessibilityLabel = @"Delete Font File";
     UISwipeActionsConfiguration *configuration = [UISwipeActionsConfiguration configurationWithActions:@[ deleteAction ]];
     configuration.performsFirstActionWithFullSwipe = YES;
     return configuration;
@@ -752,7 +751,7 @@ static NSUInteger const kSPKFontSpecimenFaceLimit = 6;
     NSString *wasSelected = [SPKFontManager selectedFamilyName];
     NSError *error = nil;
     if (![SPKFontManager removeFontFile:file error:&error]) {
-        [self presentErrorWithTitle:SPKL(@"FONT_DELETE_ERROR_TITLE") message:error.localizedDescription];
+        [self presentErrorWithTitle:@"Unable to Delete Font" message:error.localizedDescription];
         return;
     }
 
@@ -808,7 +807,7 @@ static NSUInteger const kSPKFontSpecimenFaceLimit = 6;
     [self reloadFonts];
 
     if (failures.count > 0) {
-        [self presentErrorWithTitle:imported > 0 ? SPKL(@"FONT_IMPORT_PARTIAL_ERROR_TITLE") : SPKL(@"FONT_IMPORT_ERROR_TITLE")
+        [self presentErrorWithTitle:imported > 0 ? @"Some Fonts Were Not Imported" : @"Unable to Import Font"
                             message:[failures componentsJoinedByString:@"\n"]];
     }
 }
@@ -816,8 +815,8 @@ static NSUInteger const kSPKFontSpecimenFaceLimit = 6;
 - (void)presentErrorWithTitle:(NSString *)title message:(NSString *)message {
     [SPKIGAlertPresenter presentAlertFromViewController:self
                                                   title:title
-                                                message:message.length > 0 ? message : SPKL(@"FONT_ERROR_GENERIC_MESSAGE")
-                                                actions:@[ [SPKIGAlertAction actionWithTitle:SPKL(@"ALERT_ACTION_OK")
+                                                message:message.length > 0 ? message : @"Something went wrong."
+                                                actions:@[ [SPKIGAlertAction actionWithTitle:@"OK"
                                                                                        style:SPKIGAlertActionStyleCancel
                                                                                      handler:nil] ]];
 }
