@@ -97,6 +97,12 @@ SPK_NOTIF_CONST(kSPKNotificationShareLongPressCopyLink, "share_long_press_copy_l
 SPK_NOTIF_CONST(kSPKNotificationCopyComment, "copy_comment");
 SPK_NOTIF_CONST(kSPKNotificationCommentSortUnavailable, "comment_sort_unavailable");
 SPK_NOTIF_CONST(kSPKNotificationCopyGIFLink, "copy_gif_link");
+SPK_NOTIF_CONST(kSPKNotificationCopyGIFTitle, "copy_gif_title");
+SPK_NOTIF_CONST(kSPKNotificationPresenceOnline, "presence_online");
+SPK_NOTIF_CONST(kSPKNotificationPresenceOffline, "presence_offline");
+SPK_NOTIF_CONST(kSPKNotificationPresenceTyping, "presence_typing");
+SPK_NOTIF_CONST(kSPKNotificationPresenceRead, "presence_read");
+SPK_NOTIF_CONST(kSPKNotificationPresenceUserRule, "presence_user_rule");
 SPK_NOTIF_CONST(kSPKNotificationMediaEncodingLogs, "media_encoding_logs");
 SPK_NOTIF_CONST(kSPKNotificationFlexUnavailable, "flex_unavailable");
 #undef SPK_NOTIF_CONST
@@ -239,10 +245,19 @@ NSArray<NSDictionary *> *SPKNotificationPreferenceSections(void) {
               SPKNotificationItem(kSPKNotificationProfileStorySeenUserRule, @"Story Seen List Changes", @"eye"),
               SPKNotificationItem(kSPKNotificationProfileMessagesSeenUserRule, @"Chat Seen List Changes", @"eye"),
           ]},
+        @{@"title" : @"Presence",
+          @"items" : @[
+              SPKNotificationItem(kSPKNotificationPresenceOnline, @"Came online", @"circle_check_filled"),
+              SPKNotificationItem(kSPKNotificationPresenceOffline, @"Went offline", @"circle_xmark_filled"),
+              SPKNotificationItem(kSPKNotificationPresenceTyping, @"Started typing", @"keyboard"),
+              SPKNotificationItem(kSPKNotificationPresenceRead, @"Message read", @"eye"),
+              SPKNotificationItem(kSPKNotificationPresenceUserRule, @"Tracking list changes", @"activity"),
+          ]},
         @{@"title" : @"Comments",
           @"items" : @[
               SPKNotificationItem(kSPKNotificationCopyComment, @"Copy Comment", @"copy"),
               SPKNotificationItem(kSPKNotificationCopyGIFLink, @"Copy Media Link", @"link"),
+              SPKNotificationItem(kSPKNotificationCopyGIFTitle, @"Copy GIF title", @"gif"),
               SPKNotificationItem(kSPKNotificationCommentSortUnavailable, @"Sorting Unavailable", @"sort"),
           ]},
         @{@"title" : @"Media",
