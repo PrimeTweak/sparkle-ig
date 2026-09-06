@@ -81,6 +81,13 @@ static NSArray<NSDictionary *> *SPKAutoSaveFilterEntriesFromRawValue(SPKAutoSave
     return entries.copy;
 }
 
+static NSString *SPKAutoSaveFilterResolvedListKey(SPKAutoSaveFilterConfig *config, NSString *key) {
+    if (!config.alwaysAccountScopedLists)
+        return SPKEffectivePreferenceKey(key);
+    NSString *pk = [SPKAccountManager preferenceNamespacePK];
+    return pk.length > 0 ? [NSString stringWithFormat:@"u_%@_%@", pk, key] : nil;
+}
+
 NSArray<NSDictionary *> *SPKAutoSaveFilterList(SPKAutoSaveFilterConfig *config) {
     NSString *key = SPKAutoSaveFilterResolvedListKey(config, SPKAutoSaveFilterActiveListKey(config));
     return SPKAutoSaveFilterEntriesFromRawValue(config, SPKPreferenceObjectForKey(key));
