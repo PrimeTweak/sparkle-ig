@@ -253,10 +253,6 @@
     immersiveConfig:(id)immersiveConfig
     backgroundView:(id)backgroundView
     launcherSet:(id)launcherSet;
-                defaultConfig:(id)defaultConfig
-              immersiveConfig:(id)immersiveConfig
-               backgroundView:(id)backgroundView
-                  launcherSet:(id)launcherSet;
 @end
 
 @interface IGLiquidGlassInteractiveTabBar : UIView
@@ -936,8 +932,6 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 + (void)makeSheet:(FLEXAlertBuilder)block
     showFrom:(UIViewController *)viewController
     source:(id)viewOrBarItem;
-         showFrom:(UIViewController *)viewController
-           source:(id)viewOrBarItem;
 
 // Construct an alert
 + (UIAlertController *)makeAlert:(FLEXAlertBuilder)block;
@@ -1077,12 +1071,6 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
     capabilities:(unsigned long long)capabilities
     correlationId:(id)correlationId
     isCloseFriend:(BOOL)isCloseFriend;
-             didReceiveUpdateForUserPk:(id)pk
-                              isActive:(BOOL)isActive
-                      lastActivityAtMs:(double)lastActivityAtMs
-                          capabilities:(unsigned long long)capabilities
-                         correlationId:(id)correlationId
-                         isCloseFriend:(BOOL)isCloseFriend;
 // The store IG itself reads to draw activity dots, regardless of how the state
 // got there. Values are IGPresenceState, an opaque value object.
 - (id)presenceStatesByUserPk;
@@ -1114,8 +1102,6 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 - (instancetype)initWithCTAButtonType:(NSInteger)type
     fakeComposerEnabled:(BOOL)enabled
     commentBarDisabled:(BOOL)disabled;
-                   fakeComposerEnabled:(BOOL)enabled
-                      commentBarDisabled:(BOOL)disabled;
 @end
 
 
