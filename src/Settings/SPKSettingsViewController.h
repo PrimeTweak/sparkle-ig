@@ -6,10 +6,15 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface SPKSettingsViewController : UIViewController <UITableViewDataSource, UITableViewDelegate>
+@interface SPKSettingsViewController : UIViewController <UITableViewDataSource, UITableViewDelegate, UISearchResultsUpdating>
 
 - (instancetype)initWithTitle:(NSString *)title sections:(NSArray *)sections reduceMargin:(BOOL)reduceMargin;
 - (instancetype)init;
+
+/// Builds the leading and trailing bar buttons. Runs on load and on every
+/// appearance, and resets both sets, so a subclass adding its own button must
+/// override this and re-add after calling super rather than installing it once.
+- (void)setupNavigationItems;
 
 @property (nonatomic, strong, readonly) UITableView *tableView;
 @property (nonatomic, strong, readonly) NSArray *sections;
