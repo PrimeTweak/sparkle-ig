@@ -18,30 +18,6 @@ static CGFloat const kSPKInfoSheetMinimumHeight = 180.0;
 
 NSString *const SPKTopicSectionInfoSheetKey = @"spk_usesInfoSheet";
 
-NSArray<SPKSetting *> *SPKSettingsHelpRowsInSection(NSDictionary *section) {
-    if (![section isKindOfClass:[NSDictionary class]])
-        return @[];
-
-    NSArray *rows = section[@"rows"];
-    if (![rows isKindOfClass:[NSArray class]])
-        return @[];
-
-    NSMutableArray<SPKSetting *> *helpRows = [NSMutableArray array];
-    for (SPKSetting *row in rows) {
-        if (![row isKindOfClass:[SPKSetting class]])
-            continue;
-        if (row.helpText.length == 0)
-            continue;
-        // A row removed from the table is removed from its own explanation too.
-        // This is the whole point of hanging help off the row rather than
-        // listing it separately in a footer.
-        if (row.hiddenProvider && row.hiddenProvider())
-            continue;
-        [helpRows addObject:row];
-    }
-    return [helpRows copy];
-}
-
 /// Laid-out height of `text` at `width`, with no view involved.
 static CGFloat SPKInfoSheetTextHeight(NSString *text, UIFont *font, CGFloat width) {
     if (text.length == 0 || !font)

@@ -32,9 +32,4 @@ NS_ASSUME_NONNULL_BEGIN
 /// it with `SPKTopicSectionWithInfoSheet()`; absent, the row count decides.
 FOUNDATION_EXPORT NSString *const SPKTopicSectionInfoSheetKey;
 
-/// The rows of `section` that carry help text, in display order. Rows currently
-/// removed by their `hiddenProvider` are skipped, so an explanation never
-/// describes a control the reader cannot find.
-FOUNDATION_EXPORT NSArray<SPKSetting *> *SPKSettingsHelpRowsInSection(NSDictionary *section);
-
 NS_ASSUME_NONNULL_END
