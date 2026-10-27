@@ -154,10 +154,10 @@ static void SPKSetReelsActionButtonMenuHidden(UIButton *button, BOOL hidden) {
     }
 
     NSNumber *storedAlpha = objc_getAssociatedObject(button, kSPKActionButtonMenuHiddenAlphaAssocKey);
-    CGFloat alpha = storedAlpha ? storedAlpha.doubleValue : 1.0;
-    button.alpha = alpha;
-    button.layer.opacity = alpha;
+    // Cleared first so -setAlpha: follows the alpha source again when there is one.
     objc_setAssociatedObject(button, kSPKActionButtonMenuHiddenAlphaAssocKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    button.alpha = storedAlpha ? storedAlpha.doubleValue : 1.0;
+    button.layer.opacity = (float)button.alpha;
 }
 
 static BOOL SPKActionMenuButtonIsStories(UIButton *button) {
@@ -215,6 +215,16 @@ static UITargetedPreview *SPKActionMenuButtonMenuPreview(UIButton *button) {
 @end
 
 @implementation SPKActionMenuButton
+
+- (void)setAlpha:(CGFloat)alpha {
+    // While its menu hides the button, every alpha write keeps it at zero, the alpha source's included.
+    UIView *source = self.spk_alphaSource;
+    if (objc_getAssociatedObject(self, kSPKActionButtonMenuHiddenAlphaAssocKey))
+        alpha = 0.0;
+    else if (source)
+        alpha = source.hidden ? 0.0 : source.alpha;
+    [super setAlpha:alpha];
+}
 
 - (UITargetedPreview *)contextMenuInteraction:(UIContextMenuInteraction *)interaction
     previewForHighlightingMenuWithConfiguration:(UIContextMenuConfiguration *)configuration {

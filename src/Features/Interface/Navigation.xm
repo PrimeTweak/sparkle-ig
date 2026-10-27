@@ -110,6 +110,12 @@ static BOOL SPKIsMessagesOnlyMode(void) {
     // Removes the surface from the main swipeable app collection view
     return %orig(filterSurfacesArray(surfaces), controller, haptics, set);
 }
+
+// Instagram hands a rebuilt surface list here when it repopulates the tab bar;
+// unfiltered, hidden tabs come back in the swipe.
+- (void)updateSurfaces:(id)surfaces {
+    %orig(filterSurfacesArray(surfaces));
+}
 %end
 
 %hook IGTabBarController

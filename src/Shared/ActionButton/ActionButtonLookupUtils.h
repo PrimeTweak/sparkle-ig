@@ -7,6 +7,10 @@ extern "C" {
 
 id SPKObjectForSelector(id target, NSString *selectorName);
 id SPKKVCObject(id target, NSString *key);
+/// YES when `-valueForKey:` would resolve `key` on `target` instead of throwing. Mirrors
+/// Foundation's accessor search, so a guarded read returns the same value without the cost
+/// of a thrown and caught NSUnknownKeyException on each miss.
+BOOL SPKKVCKeyIsResolvable(id target, NSString *key);
 NSArray *SPKArrayFromCollection(id collection);
 NSURL *SPKURLFromValue(id value);
 NSString *SPKStringFromValue(id value);
