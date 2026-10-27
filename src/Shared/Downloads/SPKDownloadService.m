@@ -2,6 +2,7 @@
 #import "SPKDownloadService.h"
 
 #import "../../Utils.h"
+#import "../Account/SPKAccountManager.h"
 #import "../UI/SPKMediaChrome.h"
 #import "../UI/SPKNotificationCenter.h"
 #import "SPKDownloadPresenter.h"
@@ -143,7 +144,8 @@
     [self.scheduler retryItemID:itemID inJobID:jobID];
 }
 - (void)clearFinishedHistory {
-    [self.scheduler clearFinishedHistory];
+    NSString *accountPK = SPKPerAccountModeActive() ? [SPKAccountManager currentAccountPK] : nil;
+    [self.scheduler clearFinishedHistoryForAccountPK:accountPK];
 }
 - (void)removeJobID:(NSString *)jobID {
     [self.scheduler removeJobID:jobID];

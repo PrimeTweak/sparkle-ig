@@ -9,6 +9,7 @@
 #import "../../AssetUtils.h"
 #import "../../InstagramHeaders.h"
 #import "../../Networking/SPKInstagramAPI.h"
+#import "../../Shared/Account/SPKAccountManager.h"
 #import "../../Shared/UI/SPKChrome.h"
 #import "../../Utils.h"
 #import "FollowIndicator.h"
@@ -69,9 +70,20 @@ static UIColor *SPKFollowIndicatorColor(BOOL followsYou) {
                       : [UIColor colorWithRed:0.85 green:0.30 blue:0.30 alpha:1.0];
 }
 
-// Follow status is fetched once per profile PK and memoised globally, so
-// re-entering a profile (or IG recycling the controller) reuses the answer
-// instead of re-hitting the throttled /friendships/ endpoint.
+// A cached answer is shown at once but trusted only this long; the next profile
+// entry then revalidates it in the background, off the throttled /friendships/ path.
+static NSTimeInterval const kSPKFollowStatusFreshInterval = 60.0;
+
+// "Follows you" is a fact about a (viewer, profile) pair, so the viewing
+// account is part of the key: the same profile seen from two accounts must
+// never share an answer.
+static NSString *SPKFollowStatusKey(NSString *viewerPK, NSString *profilePK) {
+    return [NSString stringWithFormat:@"%@|%@", viewerPK, profilePK];
+}
+
+// Follow status memoised per (viewer, profile) key, so re-entering a profile
+// (or IG recycling the controller) renders at once instead of waiting on the
+// network. Fetch times live beside it to age the entries out.
 static NSMutableDictionary<NSString *, NSNumber *> *SPKFollowStatusCache(void) {
     static NSMutableDictionary *cache;
     static dispatch_once_t onceToken;
@@ -79,6 +91,20 @@ static NSMutableDictionary<NSString *, NSNumber *> *SPKFollowStatusCache(void) {
         cache = [NSMutableDictionary dictionary];
     });
     return cache;
+}
+
+static NSMutableDictionary<NSString *, NSDate *> *SPKFollowStatusFetchDates(void) {
+    static NSMutableDictionary *dates;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        dates = [NSMutableDictionary dictionary];
+    });
+    return dates;
+}
+
+static BOOL SPKFollowStatusIsFresh(NSString *key) {
+    NSDate *fetched = SPKFollowStatusFetchDates()[key];
+    return fetched && -fetched.timeIntervalSinceNow < kSPKFollowStatusFreshInterval;
 }
 
 // Maps a live profile controller to the stat container it last laid out in, so
@@ -136,6 +162,42 @@ static NSString *SPKFollowBadgeSpec(BOOL followsYou) {
                                       SPKFollowIndicatorColorful() ? 1 : 0];
 }
 
+static void SPKCollectStatLabels(UIView *view, UIView *badge, NSMutableArray<UILabel *> *labels) {
+    for (UIView *subview in view.subviews) {
+        if (subview == badge || subview.hidden)
+            continue;
+        if ([subview isKindOfClass:[UILabel class]])
+            [labels addObject:(UILabel *)subview];
+        else
+            SPKCollectStatLabels(subview, badge, labels);
+    }
+}
+
+// Keeps the badge below the stat labels: when the name wraps, IG tightens the space
+// under the counts and a fixed bottom inset lands the badge on them. Constraints on
+// labels that leave the hierarchy are dropped by UIKit automatically.
+static void SPKAnchorFollowBadgeBelowStats(UIView *badge, UIView *container) {
+    static const void *kAnchoredLabelsKey = &kAnchoredLabelsKey;
+    NSHashTable *anchored = objc_getAssociatedObject(badge, kAnchoredLabelsKey);
+    if (!anchored) {
+        anchored = [NSHashTable weakObjectsHashTable];
+        objc_setAssociatedObject(badge, kAnchoredLabelsKey, anchored, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+
+    NSMutableArray<UILabel *> *labels = [NSMutableArray array];
+    SPKCollectStatLabels(container, badge, labels);
+
+    NSMutableArray<NSLayoutConstraint *> *constraints = [NSMutableArray array];
+    for (UILabel *label in labels) {
+        if ([anchored containsObject:label])
+            continue;
+        [anchored addObject:label];
+        [constraints addObject:[badge.topAnchor constraintGreaterThanOrEqualToAnchor:label.bottomAnchor constant:4.0]];
+    }
+    if (constraints.count > 0)
+        [NSLayoutConstraint activateConstraints:constraints];
+}
+
 static void SPKRenderFollowBadge(UIViewController *controller, UIView *container) {
     if (!container)
         return;
@@ -154,8 +216,11 @@ static void SPKRenderFollowBadge(UIViewController *controller, UIView *container
     NSString *spec = SPKFollowBadgeSpec(followsYou);
     if (existing) {
         NSString *existingSpec = objc_getAssociatedObject(existing, kSPKFollowBadgeSpecAssocKey);
-        if ([existingSpec isEqualToString:spec])
-            return; // Identical badge already installed; its constraints keep it placed.
+        if ([existingSpec isEqualToString:spec]) {
+            // Identical badge already installed; only pick up stat labels IG rebuilt.
+            SPKAnchorFollowBadgeBelowStats(existing, container);
+            return;
+        }
         [existing removeFromSuperview];
     }
 
@@ -188,11 +253,15 @@ static void SPKRenderFollowBadge(UIViewController *controller, UIView *container
     objc_setAssociatedObject(badge, kSPKFollowBadgeSpecAssocKey, spec, OBJC_ASSOCIATION_COPY_NONATOMIC);
 
     [container addSubview:badge];
-    // Small bottom margin so the badge doesn't sit flush against the edge.
+    // Small bottom margin so the badge doesn't sit flush against the edge. It is
+    // only a preference: the stat-label constraints win when space is tight.
+    NSLayoutConstraint *bottom = [badge.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-8.0];
+    bottom.priority = UILayoutPriorityDefaultHigh;
     [NSLayoutConstraint activateConstraints:@[
         [badge.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
-        [badge.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-8.0]
+        bottom
     ]];
+    SPKAnchorFollowBadgeBelowStats(badge, container);
 }
 
 // Ask the controller's last-known stat container to re-render, e.g. after an
@@ -208,12 +277,15 @@ static void SPKNudgeFollowIndicator(UIViewController *controller) {
         [container setNeedsLayout];
 }
 
-static void SPKFetchFollowStatus(UIViewController *controller, NSString *profilePK) {
-    SPKSetFollowFetchPK(controller, profilePK);
+// `key` is the (viewer, profile) key the request was issued for. It guards the
+// response as well as the cache slot: a reply that lands after an account
+// switch belongs to the previous viewer and must not reach the controller.
+static void SPKFetchFollowStatus(UIViewController *controller, NSString *profilePK, NSString *key) {
+    SPKSetFollowFetchPK(controller, key);
 
     __weak UIViewController *weakController = controller;
-    NSString *requestedPK = profilePK.copy;
-    NSString *path = [NSString stringWithFormat:@"friendships/show/%@/", requestedPK];
+    NSString *requestedPK = key.copy;
+    NSString *path = [NSString stringWithFormat:@"friendships/show/%@/", profilePK];
 
     [SPKInstagramAPI sendRequestWithMethod:@"GET"
                                       path:path
@@ -236,6 +308,7 @@ static void SPKFetchFollowStatus(UIViewController *controller, NSString *profile
 
                                         NSNumber *followsYou = @([response[@"followed_by"] boolValue]);
                                         SPKFollowStatusCache()[requestedPK] = followsYou;
+                                        SPKFollowStatusFetchDates()[requestedPK] = [NSDate date];
                                         SPKSetFollowStatus(strongController, followsYou);
                                         SPKNudgeFollowIndicator(strongController);
                                     });
@@ -266,22 +339,28 @@ static void SPKRefreshFollowIndicator(UIViewController *controller) {
         return;
     }
 
-    // Already resolved for this exact profile.
-    if ([SPKGetFollowProfilePK(controller) isEqualToString:profilePK] && SPKGetFollowStatus(controller))
-        return;
+    NSString *key = SPKFollowStatusKey(currentPK, profilePK);
 
-    SPKSetFollowProfilePK(controller, profilePK);
-    SPKSetFollowStatus(controller, nil);
-
-    NSNumber *cached = SPKFollowStatusCache()[profilePK];
-    if (cached) {
-        SPKSetFollowStatus(controller, cached);
-        SPKNudgeFollowIndicator(controller);
-        return;
+    // A different profile, or the same one seen from another account: whatever
+    // the controller holds answers a different question.
+    if (![SPKGetFollowProfilePK(controller) isEqualToString:key]) {
+        SPKSetFollowProfilePK(controller, key);
+        SPKSetFollowStatus(controller, nil);
     }
 
-    if (![SPKGetFollowFetchPK(controller) isEqualToString:profilePK])
-        SPKFetchFollowStatus(controller, profilePK);
+    // Show the cached answer straight away, even when it is due a revalidation,
+    // so the badge never blinks out while the request is in flight.
+    NSNumber *cached = SPKFollowStatusCache()[key];
+    if (cached && ![SPKGetFollowStatus(controller) isEqual:cached]) {
+        SPKSetFollowStatus(controller, cached);
+        SPKNudgeFollowIndicator(controller);
+    }
+
+    if (cached && SPKFollowStatusIsFresh(key))
+        return;
+
+    if (![SPKGetFollowFetchPK(controller) isEqualToString:key])
+        SPKFetchFollowStatus(controller, profilePK, key);
 }
 
 %group SPKFollowIndicatorHooks
@@ -337,6 +416,16 @@ void SPKInstallFollowIndicatorHooksIfEnabled(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         %init(SPKFollowIndicatorHooks);
+
+        // Entries are keyed by viewer, so a switch cannot leak an answer; this
+        // only stops the previous account's entries piling up.
+        [[NSNotificationCenter defaultCenter] addObserverForName:SPKAccountDidChangeNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(__unused NSNotification *note) {
+            [SPKFollowStatusCache() removeAllObjects];
+            [SPKFollowStatusFetchDates() removeAllObjects];
+        }];
 
         // Refresh visible profiles in place when the look changes from settings.
         [[NSNotificationCenter defaultCenter] addObserverForName:SPKFollowIndicatorDidChangeNotification

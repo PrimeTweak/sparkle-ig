@@ -491,6 +491,16 @@ static NSString *SPKRenameStagedPath(NSString *stagedPath, SPKDownloadItem *item
             if (!strongSelf)
                 return;
             [strongSelf.activeTransfers removeObjectForKey:item.itemID];
+            if ([error.domain isEqualToString:SPKDownloadErrorDomain] && error.code == SPKDownloadErrorServerUnavailable &&
+                req.dashFallbackURLString.length > 0) {
+                SPKLog(@"Downloads", @"ready-to-play file unavailable, falling back to DASH %ldx%ld", (long)req.dashWidth, (long)req.dashHeight);
+                req.remoteURLString = req.dashFallbackURLString;
+                req.dashFallbackURLString = nil;
+                req.requiresDashMerge = YES;
+                req.preferredFileExtension = @"mp4";
+                [strongSelf startDashMergeItem:item job:job fromState:SPKDownloadStateRunning];
+                return;
+            }
             if (!stagedPath || error) {
                 [strongSelf transitionItemID:item.itemID
                                        jobID:job.jobID
@@ -509,13 +519,17 @@ static NSString *SPKRenameStagedPath(NSString *stagedPath, SPKDownloadItem *item
 }
 
 - (void)startDashMergeItem:(SPKDownloadItem *)item job:(SPKDownloadJob *)job {
+    [self startDashMergeItem:item job:job fromState:SPKDownloadStateQueued];
+}
+
+- (void)startDashMergeItem:(SPKDownloadItem *)item job:(SPKDownloadJob *)job fromState:(SPKDownloadState)fromState {
     SPKDownloadItemRequest *req = item.request;
     NSURL *primary = [NSURL URLWithString:req.remoteURLString];
     NSURL *secondary = req.dashSecondaryURLString.length ? [NSURL URLWithString:req.dashSecondaryURLString] : nil;
     if (!primary) {
         [self transitionItemID:item.itemID
                          jobID:job.jobID
-                          from:SPKDownloadStateQueued
+                          from:fromState
                             to:SPKDownloadStateFailed
                         update:^(SPKDownloadMutableItemSnapshot *snap) {
                             snap.error = SPKDownloadError(SPKDownloadErrorInvalidURL, @"Invalid media URL.", nil);
@@ -526,7 +540,7 @@ static NSString *SPKRenameStagedPath(NSString *stagedPath, SPKDownloadItem *item
     }
     [self transitionItemID:item.itemID
                      jobID:job.jobID
-                      from:SPKDownloadStateQueued
+                      from:fromState
                         to:SPKDownloadStateRunning
                     update:^(SPKDownloadMutableItemSnapshot *snap) {
                         snap.progress = 0.05;
@@ -899,10 +913,17 @@ static NSString *SPKRenameStagedPath(NSString *stagedPath, SPKDownloadItem *item
 }
 
 - (void)clearFinishedHistory {
+    [self clearFinishedHistoryForAccountPK:nil];
+}
+
+- (void)clearFinishedHistoryForAccountPK:(NSString *)accountPK {
     @synchronized(self) {
         NSMutableArray *remaining = [NSMutableArray array];
         for (SPKDownloadJob *job in self.jobs) {
-            if (SPKDownloadJobHasInFlightItems(job)) {
+            BOOL belongsToScope = accountPK.length == 0 ||
+                                  job.ownerAccountPK.length == 0 ||
+                                  [job.ownerAccountPK isEqualToString:accountPK];
+            if (SPKDownloadJobHasInFlightItems(job) || !belongsToScope) {
                 [remaining addObject:job];
             } else {
                 SPKDeleteJobScratch(job);

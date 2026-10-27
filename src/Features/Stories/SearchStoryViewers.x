@@ -79,6 +79,32 @@ static NSString *SPKViewerMediaIDFromItem(id item) {
     return nil;
 }
 
+// Returns YES when any visible control other than `ignored` lives under `view`.
+static BOOL SPKViewHasVisibleControl(UIView *view, UIView *ignored, NSInteger depth) {
+    for (UIView *sub in view.subviews) {
+        if (sub == ignored || sub.hidden || sub.alpha < 0.01)
+            continue;
+        if ([sub isKindOfClass:[UIControl class]] && sub.userInteractionEnabled)
+            return YES;
+        if (depth < 4 && SPKViewHasVisibleControl(sub, ignored, depth + 1))
+            return YES;
+    }
+    return NO;
+}
+
+// Only the viewer header is a bare title; the comment and reply headers carry a
+// trailing accessory such as "See all". Checked structurally, not by header text.
+static BOOL SPKHeaderCanHostSearchButton(UIView *header, UIView *button) {
+    @try {
+        UIView *rightView = [header valueForKey:@"_rightView"];
+        if ([rightView isKindOfClass:[UIView class]] && rightView != button && !rightView.hidden && rightView.alpha > 0.01 &&
+            rightView.superview)
+            return NO;
+    } @catch (__unused NSException *e) {
+    }
+    return !SPKViewHasVisibleControl(header, button, 0);
+}
+
 %group SPKSearchViewerListHooks
 
 %hook IGLabelSupplementaryView
@@ -98,8 +124,17 @@ static NSString *SPKViewerMediaIDFromItem(id item) {
         return; // not a story viewer list header
 
     SPKChromeButton *button = objc_getAssociatedObject(vc, &kSPKSearchButtonKey);
-    if (button && button.superview)
-        return; // already placed on a header (this or another)
+    if (!SPKHeaderCanHostSearchButton(self, button)) {
+        // A header with its own trailing control would sit under the glyph; a
+        // reused header that became one gives the button up.
+        if (button.superview == self) {
+            [button removeFromSuperview];
+            SPKLog(@"ViewerSearch", @"[Sparkle] Moved search button off a header with its own accessory");
+        }
+        return;
+    }
+    if (button.superview && button.superview != self && button.window)
+        return; // already placed on another eligible header
 
     if (!button) {
         // SPKChromeButton keeps the glyph inside a secure canvas so it stays
@@ -115,21 +150,21 @@ static NSString *SPKViewerMediaIDFromItem(id item) {
         // with the trash / reply column instead of hugging the screen edge.
         button.iconOffset = UIOffsetMake(-6.0, 0.0);
         button.accessibilityLabel = @"Search viewers";
-        button.translatesAutoresizingMaskIntoConstraints = NO;
         [button addTarget:vc action:@selector(spk_openViewerSearch) forControlEvents:UIControlEventTouchUpInside];
         objc_setAssociatedObject(vc, &kSPKSearchButtonKey, button, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 
-    // Attach (or re-attach after cell reuse) to this header, flush to the
-    // trailing edge and vertically centered with the right-hand button column.
-    [self addSubview:button];
-    [NSLayoutConstraint activateConstraints:@[
-        [button.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-        [button.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-        [button.widthAnchor constraintEqualToConstant:44.0],
-        [button.heightAnchor constraintEqualToConstant:44.0],
-    ]];
-    SPKLog(@"ViewerSearch", @"[Sparkle] Pinned search button to viewers header");
+    // The header lays out with frames, so constraints added from its layoutSubviews
+    // left the glyph at the top-left until a later pass. The button is placed by
+    // frame on every pass, flush to the trailing edge and vertically centered.
+    if (button.superview != self) {
+        [self addSubview:button];
+        SPKLog(@"ViewerSearch", @"[Sparkle] Pinned search button to viewers header");
+    }
+    button.translatesAutoresizingMaskIntoConstraints = YES;
+    CGRect bounds = self.bounds;
+    button.frame = CGRectMake(CGRectGetMaxX(bounds) - 44.0, CGRectGetMidY(bounds) - 22.0, 44.0, 44.0);
+    [self bringSubviewToFront:button];
 }
 
 %end

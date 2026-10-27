@@ -50,6 +50,9 @@ static UIColor *SPKImportAmberColor(void) {
 @property (nonatomic) long long fileSize;
 @property (nonatomic, strong, nullable) UIImage *thumbnail;
 @property (nonatomic) BOOL thumbnailRequested;
+/// Frame grabs already run for this file, so a failed one is retried without re-running
+/// the generator on every scroll.
+@property (nonatomic) NSInteger thumbnailAttempts;
 /// Set once the user edits this file's own metadata, pinning it against shared-defaults changes.
 @property (nonatomic) BOOL userEdited;
 /// Carried over from a Regram vault import; applied to the saved gallery file.
@@ -1055,12 +1058,18 @@ static UIColor *SPKImportAmberColor(void) {
 
 #pragma mark - Thumbnails
 
+// A frame grab can come back empty for a file still settling on disk; an undecodable one
+// would re-run the generator on every scroll if it were retried forever.
+static const NSInteger kSPKImportThumbnailMaxAttempts = 2;
+
 - (void)ensureThumbnailForItem:(SPKGalleryImportQueuedFile *)item {
     if (item.thumbnail || item.thumbnailRequested || !item.tempFileURL ||
+        item.thumbnailAttempts >= kSPKImportThumbnailMaxAttempts ||
         item.mediaType == SPKGalleryMediaTypeAudio) {
         return; // audio uses the gallery placeholder, no frame to render
     }
     item.thumbnailRequested = YES;
+    item.thumbnailAttempts++;
     CGFloat scale = MAX(UIScreen.mainScreen.scale, 1.0);
     CGSize size = CGSizeMake(SPKImportThumbnailSize * scale, SPKImportThumbnailSize * scale);
     __weak typeof(self) weakSelf = self;
@@ -1069,22 +1078,33 @@ static UIColor *SPKImportAmberColor(void) {
                                        size:size
                                  completion:^(UIImage *_Nullable image) {
                                      if (!image) {
+                                         // A later reconfigure may try again, bounded by the attempt cap.
+                                         item.thumbnailRequested = NO;
+                                         SPKLog(@"Gallery", @"[Sparkle] Import thumbnail render failed for %@", item.fileLabel);
                                          return;
                                      }
                                      item.thumbnail = image;
-                                     [weakSelf reloadRowForItem:item];
+                                     [weakSelf refreshRowForItem:item];
                                  }];
 }
 
-- (void)reloadRowForItem:(SPKGalleryImportQueuedFile *)item {
-    NSUInteger row = [self.queuedFiles indexOfObject:item];
+// The frame often lands while the row is outside the visible set, where a table reload drops
+// the update; the live cell is reconfigured directly, and a dequeued row reads the item.
+- (void)refreshRowForItem:(SPKGalleryImportQueuedFile *)item {
+    NSUInteger row = [self.queuedFiles indexOfObjectIdenticalTo:item];
     if (row == NSNotFound) {
         return;
     }
     NSIndexPath *ip = [NSIndexPath indexPathForRow:(NSInteger)row inSection:SPKGalleryImportMainSectionQueue];
-    if ([[self.tableView indexPathsForVisibleRows] containsObject:ip]) {
-        [self.tableView reloadRowsAtIndexPaths:@[ ip ] withRowAnimation:UITableViewRowAnimationFade];
+    SPKGalleryImportQueueCell *cell = (SPKGalleryImportQueueCell *)[self.tableView cellForRowAtIndexPath:ip];
+    if (![cell isKindOfClass:[SPKGalleryImportQueueCell class]]) {
+        return;
     }
+
+    [cell configureWithItem:item
+              technicalText:[self technicalTextForItem:item]
+                sourceLabel:[self sourceLabelForItem:item]
+               needsDetails:[self needsDetailsForItem:item]];
 }
 
 #pragma mark - Document picker

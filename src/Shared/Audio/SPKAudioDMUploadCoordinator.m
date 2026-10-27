@@ -20,6 +20,7 @@
 @property (nonatomic, weak) UIViewController *presenter;
 @property (nonatomic, weak) UIView *sourceView;
 @property (nonatomic, strong) SPKNotificationPillView *progressView;
+- (void)sendConvertedURL:(NSURL *)url duration:(NSTimeInterval)duration waveform:(id)waveform;
 @end
 
 static SPKAudioDMUploadCoordinator *sSPKAudioActiveDMUploadCoordinator;
@@ -49,25 +50,149 @@ static NSURL *SPKAudioDMTemporaryURL(NSString *extension) {
     return [NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:name]];
 }
 
-static id SPKAudioDMCreateWaveform(NSTimeInterval duration) {
-    NSUInteger sampleCount = 50;
-    NSMutableArray<NSNumber *> *averageVolume = [NSMutableArray arrayWithCapacity:sampleCount];
-    for (NSUInteger i = 0; i < sampleCount; i++) {
-        double phase = (double)(i % 10) / 10.0;
-        [averageVolume addObject:@(0.12 + (phase * 0.18))];
-    }
-
+static id SPKAudioDMCreateWaveformWithSamples(NSArray<NSNumber *> *averageVolume, NSTimeInterval duration) {
     Class waveformClass = NSClassFromString(@"IGDirectAudioWaveform");
     SEL initializer = NSSelectorFromString(@"initWithVolumeRecordingInterval:averageVolume:");
-    if (!waveformClass || ![waveformClass instancesRespondToSelector:initializer])
+    if (averageVolume.count == 0 || !waveformClass || ![waveformClass instancesRespondToSelector:initializer])
         return nil;
 
-    double interval = (isfinite(duration) && duration > 0.1) ? MAX(duration / (double)sampleCount, 0.02) : 0.1;
+    double interval = (isfinite(duration) && duration > 0.0) ? MAX(duration / (double)averageVolume.count, 0.02) : 0.1;
     id waveform = ((id (*)(id, SEL, double, id))objc_msgSend)([waveformClass alloc],
                                                               initializer,
                                                               interval,
-                                                              [averageVolume copy]);
+                                                              averageVolume);
     return [waveform respondsToSelector:@selector(averageVolume)] ? waveform : nil;
+}
+
+// Instagram records waveform levels at roughly 10 Hz. The final file handed to the
+// sender is decoded so imported and trimmed clips show their real audio.
+static void SPKAudioDMSampleWaveform(NSURL *audioURL, NSTimeInterval duration,
+                                     void (^completion)(NSArray<NSNumber *> *samples)) {
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        @autoreleasepool {
+            AVURLAsset *asset = [AVURLAsset URLAssetWithURL:audioURL options:nil];
+            AVAssetTrack *track = [[asset tracksWithMediaType:AVMediaTypeAudio] firstObject];
+            if (!track) {
+                dispatch_async(dispatch_get_main_queue(), ^{ completion(nil); });
+                return;
+            }
+
+            NSTimeInterval resolvedDuration = duration;
+            if (!isfinite(resolvedDuration) || resolvedDuration <= 0.0)
+                resolvedDuration = CMTimeGetSeconds(asset.duration);
+            if (!isfinite(resolvedDuration) || resolvedDuration <= 0.0)
+                resolvedDuration = CMTimeGetSeconds(track.timeRange.duration);
+
+            NSInteger bucketCount = MAX((NSInteger)10, MIN((NSInteger)ceil(MAX(resolvedDuration, 1.0) * 10.0), (NSInteger)300));
+            double *sumSquares = calloc((size_t)bucketCount, sizeof(double));
+            uint64_t *valueCounts = calloc((size_t)bucketCount, sizeof(uint64_t));
+            if (!sumSquares || !valueCounts) {
+                free(sumSquares);
+                free(valueCounts);
+                dispatch_async(dispatch_get_main_queue(), ^{ completion(nil); });
+                return;
+            }
+
+            NSError *readerError = nil;
+            AVAssetReader *reader = [[AVAssetReader alloc] initWithAsset:asset error:&readerError];
+            NSDictionary *settings = @{
+                AVFormatIDKey : @(kAudioFormatLinearPCM),
+                AVLinearPCMBitDepthKey : @16,
+                AVLinearPCMIsBigEndianKey : @NO,
+                AVLinearPCMIsFloatKey : @NO,
+                AVLinearPCMIsNonInterleaved : @NO,
+            };
+            AVAssetReaderTrackOutput *output = reader ? [[AVAssetReaderTrackOutput alloc] initWithTrack:track outputSettings:settings] : nil;
+            output.alwaysCopiesSampleData = NO;
+            if (!reader || !output || ![reader canAddOutput:output]) {
+                free(sumSquares);
+                free(valueCounts);
+                dispatch_async(dispatch_get_main_queue(), ^{ completion(nil); });
+                return;
+            }
+            [reader addOutput:output];
+            if (![reader startReading]) {
+                free(sumSquares);
+                free(valueCounts);
+                dispatch_async(dispatch_get_main_queue(), ^{ completion(nil); });
+                return;
+            }
+
+            double sampleRate = 44100.0;
+            UInt32 channelCount = 1;
+            CMFormatDescriptionRef format = (__bridge CMFormatDescriptionRef)track.formatDescriptions.firstObject;
+            if (format) {
+                const AudioStreamBasicDescription *description = CMAudioFormatDescriptionGetStreamBasicDescription(format);
+                if (description) {
+                    if (description->mSampleRate > 0.0)
+                        sampleRate = description->mSampleRate;
+                    if (description->mChannelsPerFrame > 0)
+                        channelCount = description->mChannelsPerFrame;
+                }
+            }
+
+            int64_t estimatedValueCount = (int64_t)(MAX(resolvedDuration, 0.0) * sampleRate * channelCount);
+            if (estimatedValueCount <= 0)
+                estimatedValueCount = bucketCount;
+
+            int64_t valueIndex = 0;
+            while (reader.status == AVAssetReaderStatusReading) {
+                CMSampleBufferRef sampleBuffer = [output copyNextSampleBuffer];
+                if (!sampleBuffer)
+                    break;
+                CMBlockBufferRef block = CMSampleBufferGetDataBuffer(sampleBuffer);
+                if (block) {
+                    size_t byteLength = CMBlockBufferGetDataLength(block);
+                    size_t valueCount = byteLength / sizeof(int16_t);
+                    int16_t *values = valueCount > 0 ? malloc(byteLength) : NULL;
+                    if (values && CMBlockBufferCopyDataBytes(block, 0, byteLength, values) == kCMBlockBufferNoErr) {
+                        for (size_t i = 0; i < valueCount; i++) {
+                            NSInteger bucket = (NSInteger)((valueIndex * bucketCount) / estimatedValueCount);
+                            bucket = MAX((NSInteger)0, MIN(bucket, bucketCount - 1));
+                            double amplitude = (double)values[i] / 32768.0;
+                            sumSquares[bucket] += amplitude * amplitude;
+                            valueCounts[bucket]++;
+                            valueIndex++;
+                        }
+                    }
+                    free(values);
+                }
+                CMSampleBufferInvalidate(sampleBuffer);
+                CFRelease(sampleBuffer);
+            }
+
+            BOOL readSucceeded = reader.status == AVAssetReaderStatusCompleted && valueIndex > 0;
+            NSMutableArray<NSNumber *> *samples = readSucceeded ? [NSMutableArray arrayWithCapacity:(NSUInteger)bucketCount] : nil;
+            double maximum = 0.0;
+            if (readSucceeded) {
+                for (NSInteger i = 0; i < bucketCount; i++) {
+                    double rms = valueCounts[i] > 0 ? sqrt(sumSquares[i] / (double)valueCounts[i]) : 0.0;
+                    [samples addObject:@(rms)];
+                    maximum = MAX(maximum, rms);
+                }
+                if (maximum > 0.0) {
+                    for (NSInteger i = 0; i < bucketCount; i++) {
+                        // Normalize each clip while retaining its real dynamics;
+                        // light gamma keeps quieter details visible in the bubble.
+                        double normalized = pow(samples[i].doubleValue / maximum, 0.65);
+                        samples[i] = @(normalized);
+                    }
+                }
+            }
+            free(sumSquares);
+            free(valueCounts);
+
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(samples); });
+        }
+    });
+}
+
+static NSArray<NSNumber *> *SPKAudioDMFallbackWaveformSamples(NSTimeInterval duration) {
+    NSInteger count = MAX((NSInteger)10, MIN((NSInteger)ceil(MAX(duration, 1.0) * 10.0), (NSInteger)300));
+    NSMutableArray<NSNumber *> *samples = [NSMutableArray arrayWithCapacity:(NSUInteger)count];
+    for (NSInteger i = 0; i < count; i++)
+        [samples addObject:@(0.12)];
+    return samples;
 }
 
 static id SPKAudioDMIvarValue(id object, const char *name) {
@@ -528,7 +653,33 @@ static void SPKAudioDMNotify(NSString *title, NSString *message, BOOL success) {
     }
 
     NSTimeInterval safeDuration = isfinite(duration) && duration > 0 ? duration : 0;
-    id waveform = SPKAudioDMCreateWaveform(safeDuration);
+    __weak typeof(self) weakSelf = self;
+    SPKAudioDMSampleWaveform(url, safeDuration, ^(NSArray<NSNumber *> *samples) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf)
+            return;
+        if (samples.count == 0) {
+            SPKWarnLog(@"AudioUpload", @"Could not decode waveform samples for %@; using flat fallback", url.lastPathComponent);
+            samples = SPKAudioDMFallbackWaveformSamples(safeDuration);
+        }
+        id waveform = SPKAudioDMCreateWaveformWithSamples(samples, safeDuration);
+        if (!waveform) {
+            [strongSelf finishUploadProgressWithErrorTitle:@"Audio upload unavailable" subtitle:@"Could not create an Instagram audio waveform."];
+            if (sSPKAudioActiveDMUploadCoordinator == strongSelf)
+                sSPKAudioActiveDMUploadCoordinator = nil;
+            return;
+        }
+        [strongSelf sendConvertedURL:url duration:safeDuration waveform:waveform];
+    });
+}
+
+- (void)sendConvertedURL:(NSURL *)url duration:(NSTimeInterval)safeDuration waveform:(id)waveform {
+    if (![SPKAudioDMUploadCoordinator senderTargetSupportsAudioUpload:self.senderTarget]) {
+        [self finishUploadProgressWithErrorTitle:@"Audio upload unavailable" subtitle:@"The direct audio sender disappeared before sending."];
+        if (sSPKAudioActiveDMUploadCoordinator == self)
+            sSPKAudioActiveDMUploadCoordinator = nil;
+        return;
+    }
     if (!waveform) {
         [self finishUploadProgressWithErrorTitle:@"Audio upload unavailable" subtitle:@"Could not create an Instagram audio waveform."];
         if (sSPKAudioActiveDMUploadCoordinator == self)

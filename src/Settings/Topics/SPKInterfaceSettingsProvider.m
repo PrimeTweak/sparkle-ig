@@ -100,6 +100,10 @@ static BOOL SPKIsMessagesOnlyMode(void) {
                 SPKSetting *s = [SPKSetting switchCellWithTitle:@"Hide posts grid"
                                                            icon:SPKSettingsIcon(@"explore_grid")
                                                     defaultsKey:@"interface_hide_explore_grid"];
+                s.switchChangeHandler = ^(BOOL isOn) {
+                    SPKPreferenceSetObject(@(isOn), @"interface_hide_explore_grid");
+                    [[NSNotificationCenter defaultCenter] postNotificationName:SPKHideExploreGridPreferenceDidChangeNotification object:nil];
+                };
                 s.searchKeywords = @"explore suggested grid";
                 s;
             }),

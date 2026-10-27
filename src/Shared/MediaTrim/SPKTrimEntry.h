@@ -17,6 +17,17 @@ NS_ASSUME_NONNULL_BEGIN
                               metadata:(nullable SPKGallerySaveMetadata *)metadata
                              presenter:(UIViewController *)presenter;
 
+/// Same flow when the media is already on disk: `localFileURL`, a copy of the remote
+/// `localSourceURL`, is scrubbed instead of downloading again, and is the final source
+/// only when the chosen quality is that same file.
++ (void)beginTrimAndSaveForMediaObject:(nullable id)mediaObject
+                              photoURL:(nullable NSURL *)photoURL
+                              videoURL:(nullable NSURL *)videoURL
+                          localFileURL:(nullable NSURL *)localFileURL
+                        localSourceURL:(nullable NSURL *)localSourceURL
+                              metadata:(nullable SPKGallerySaveMetadata *)metadata
+                             presenter:(UIViewController *)presenter;
+
 @end
 
 NS_ASSUME_NONNULL_END

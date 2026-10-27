@@ -19,7 +19,6 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSDictionary<NSString *, NSNumber *> *)storageBreakdown;
 
 + (NSString *)fontsDirectory;
-+ (NSString *)languagePacksDirectory;
 @end
 
 NS_ASSUME_NONNULL_END

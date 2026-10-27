@@ -1,10 +1,25 @@
 #import "SPKGalleryCoreDataStack.h"
+#import <objc/runtime.h>
 #import "../../Utils.h"
 #import "SPKGalleryPaths.h"
 
 @interface SPKGalleryCoreDataStack ()
 @property (nonatomic, strong, readwrite) NSPersistentContainer *persistentContainer;
 @end
+
+// Owns a throwaway copy of an archive store: deletes it when the reading context is gone.
+@interface SPKGalleryScratchStore : NSObject
+@property (nonatomic, copy) NSString *directory;
+@end
+
+@implementation SPKGalleryScratchStore
+- (void)dealloc {
+    if (self.directory.length > 0)
+        [[NSFileManager defaultManager] removeItemAtPath:self.directory error:nil];
+}
+@end
+
+static const void *SPKGalleryScratchStoreKey = &SPKGalleryScratchStoreKey;
 
 static NSString *const kSPKGalleryEntityName = @"SPKGalleryFile";
 // On-disk entity name used by stores created before the SCInsta -> Sparkle rename.
@@ -409,9 +424,51 @@ static void SPKGalleryRunOnMain(void (^block)(void)) {
         dispatch_sync(dispatch_get_main_queue(), block);
 }
 
-// Opens an exported bundle's gallery.sqlite read-only against the current model
-// (migrating an older-schema archive first). Returns nil + sets *error on failure,
-// or nil + no error when the bundle has no store.
+// Builds a main-queue context over a store, or returns nil + sets *error.
+- (NSManagedObjectContext *)contextForStoreAtURL:(NSURL *)storeURL
+                                           model:(NSManagedObjectModel *)model
+                                         options:(NSDictionary *)options
+                                           error:(NSError *_Nullable *_Nullable)error {
+    NSPersistentStoreCoordinator *coordinator = [[NSPersistentStoreCoordinator alloc] initWithManagedObjectModel:model];
+    if (![coordinator addPersistentStoreWithType:NSSQLiteStoreType configuration:nil URL:storeURL options:options error:error]) {
+        return nil;
+    }
+    NSManagedObjectContext *context = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSMainQueueConcurrencyType];
+    context.persistentStoreCoordinator = coordinator; // context retains the coordinator
+    return context;
+}
+
+// Copies an archive store (plus its sidecars) into a throwaway directory, so it can be
+// opened read-write and migrated without ever mutating the user's backup file.
+- (NSURL *)copyStoreToScratchDirectoryFromURL:(NSURL *)storeURL scratchDirectory:(NSString **)outDirectory {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *scratch = [NSTemporaryDirectory() stringByAppendingPathComponent:
+                                                    [NSString stringWithFormat:@"spk-gallery-archive-%@", [NSUUID UUID].UUIDString]];
+    if (![fm createDirectoryAtPath:scratch withIntermediateDirectories:YES attributes:nil error:nil])
+        return nil;
+
+    NSURL *scratchStoreURL = [NSURL fileURLWithPath:[scratch stringByAppendingPathComponent:kSPKGalleryStoreName]];
+    NSMutableArray<NSURL *> *sources = [NSMutableArray arrayWithObject:storeURL];
+    [sources addObjectsFromArray:[self sidecarURLsForStoreURL:storeURL]];
+    for (NSURL *source in sources) {
+        if (![fm fileExistsAtPath:source.path])
+            continue;
+        NSString *suffix = [source.path substringFromIndex:storeURL.path.length]; // "", "-wal", "-shm"
+        NSString *destination = [scratchStoreURL.path stringByAppendingString:suffix];
+        NSError *copyError = nil;
+        if (![fm copyItemAtPath:source.path toPath:destination error:&copyError]) {
+            SPKLog(@"General", @"[Sparkle Gallery] Failed copying archive store for migration: %@", copyError);
+            [fm removeItemAtPath:scratch error:nil];
+            return nil;
+        }
+    }
+    if (outDirectory)
+        *outDirectory = scratch;
+    return scratchStoreURL;
+}
+
+// Opens an exported bundle's gallery.sqlite against the current model. Returns nil +
+// sets *error on failure, or nil + no error when the bundle has no store.
 - (NSManagedObjectContext *)archiveContextForBundleDirectory:(NSString *)bundleGalleryDirectory error:(NSError *_Nullable *_Nullable)error {
     NSString *archiveStorePath = [bundleGalleryDirectory stringByAppendingPathComponent:kSPKGalleryStoreName];
     if (![[NSFileManager defaultManager] fileExistsAtPath:archiveStorePath])
@@ -421,16 +478,59 @@ static void SPKGalleryRunOnMain(void (^block)(void)) {
     NSURL *archiveStoreURL = [NSURL fileURLWithPath:archiveStorePath];
     [self migrateStoreAtURLIfNeeded:archiveStoreURL toModel:model];
 
-    NSPersistentStoreCoordinator *coordinator = [[NSPersistentStoreCoordinator alloc] initWithManagedObjectModel:model];
-    NSDictionary *options = @{
-        NSReadOnlyPersistentStoreOption : @YES,
-        NSSQLitePragmasOption : @{@"journal_mode" : @"DELETE"}
-    };
-    if (![coordinator addPersistentStoreWithType:NSSQLiteStoreType configuration:nil URL:archiveStoreURL options:options error:error]) {
+    NSError *readOnlyError = nil;
+    NSManagedObjectContext *context = [self contextForStoreAtURL:archiveStoreURL
+                                                           model:model
+                                                         options:@{
+                                                             NSReadOnlyPersistentStoreOption : @YES,
+                                                             NSSQLitePragmasOption : @{@"journal_mode" : @"DELETE"}
+                                                         }
+                                                           error:&readOnlyError];
+    if (context)
+        return context;
+
+    // A backup from a schema `migrateStoreAtURLIfNeeded:` has no source model for fails the
+    // strict open. A scratch copy lets Core Data infer a lightweight migration, which covers
+    // every earlier schema without touching the user's backup file.
+    SPKLog(@"General", @"[Sparkle Gallery] Archive store did not open against the current schema (%@); retrying with an inferred migration", readOnlyError);
+
+    NSString *scratchDirectory = nil;
+    NSURL *scratchStoreURL = [self copyStoreToScratchDirectoryFromURL:archiveStoreURL scratchDirectory:&scratchDirectory];
+    if (!scratchStoreURL) {
+        if (error)
+            *error = readOnlyError;
         return nil;
     }
-    NSManagedObjectContext *context = [[NSManagedObjectContext alloc] initWithConcurrencyType:NSMainQueueConcurrencyType];
-    context.persistentStoreCoordinator = coordinator; // context retains the coordinator
+
+    NSError *migratingError = nil;
+    context = [self contextForStoreAtURL:scratchStoreURL
+                                   model:model
+                                 options:@{
+                                     NSMigratePersistentStoresAutomaticallyOption : @YES,
+                                     NSInferMappingModelAutomaticallyOption : @YES,
+                                     NSSQLitePragmasOption : @{@"journal_mode" : @"DELETE"}
+                                 }
+                                   error:&migratingError];
+    if (!context) {
+        SPKLog(@"General", @"[Sparkle Gallery] Failed opening archive store with an inferred migration: %@", migratingError);
+        [[NSFileManager defaultManager] removeItemAtPath:scratchDirectory error:nil];
+        if (error) {
+            *error = [NSError errorWithDomain:@"com.sparkle.gallery"
+                                         code:1
+                                     userInfo:@{
+                                         NSLocalizedDescriptionKey : @"This backup's gallery database comes from a Sparkle version this build cannot read.",
+                                         NSUnderlyingErrorKey : migratingError ?: readOnlyError
+                                     }];
+        }
+        return nil;
+    }
+
+    // Tie the scratch copy's lifetime to the context that reads it.
+    SPKGalleryScratchStore *scratch = [[SPKGalleryScratchStore alloc] init];
+    scratch.directory = scratchDirectory;
+    objc_setAssociatedObject(context, SPKGalleryScratchStoreKey, scratch, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    SPKLog(@"General", @"[Sparkle Gallery] Opened archive store via an inferred migration");
     return context;
 }
 

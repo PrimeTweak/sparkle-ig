@@ -573,9 +573,9 @@ static SPKDirectThreadContext *SPKDirectContextFromShallowInboxObject(id object)
             target = meta;
     }
 
-    NSString *threadId = SPKDirectStringFromValue(SPKDirectInboxValueForKeys(target, @[ @"threadId", @"threadID", @"thread_id" ]));
+    NSString *threadId = SPKDirectStringFromValue(SPKDirectInboxValueForKeys(target, @[ @"threadId", @"threadID", @"thread_id", @"threadIdV2ForInboxPaging" ]));
     if (threadId.length == 0 && target != object) {
-        threadId = SPKDirectStringFromValue(SPKDirectInboxValueForKeys(object, @[ @"threadId", @"threadID", @"thread_id" ]));
+        threadId = SPKDirectStringFromValue(SPKDirectInboxValueForKeys(object, @[ @"threadId", @"threadID", @"thread_id", @"threadIdV2ForInboxPaging" ]));
     }
     if (threadId.length == 0)
         return nil;

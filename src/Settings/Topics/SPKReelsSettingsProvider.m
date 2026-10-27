@@ -1,5 +1,6 @@
 #import "SPKReelsSettingsProvider.h"
 
+#import "../../Features/Reels/HideReelsHeader.h"
 #import "../../Shared/ActionButton/SPKActionButtonConfiguration.h"
 #import "../../Utils.h"
 #import "../SPKToggleMenu.h"
@@ -12,9 +13,18 @@ static NSString *const kSPKReelsActionButtonEnabledKey = @"reels_action_btn";
 + (SPKSetting *)rootSetting {
     return SPKTopicNavigationSetting(@"Reels", @"reels", 24.0, @[
         SPKTopicSection(@"Layout", @[
-            [SPKSetting switchCellWithTitle:@"Hide Reels header"
-                                       icon:SPKSettingsIcon(@"reels")
-                                defaultsKey:@"reels_hide_header"],
+            ({
+                // The reels viewer builds its bar once per session, so a change has to reach
+                // the bar already on screen.
+                SPKSetting *hideHeader = [SPKSetting switchCellWithTitle:@"Hide Reels header"
+                                                                    icon:SPKSettingsIcon(@"reels")
+                                                             defaultsKey:@"reels_hide_header"];
+                hideHeader.action = ^{
+                    [[NSNotificationCenter defaultCenter] postNotificationName:SPKHideReelsHeaderDidChangeNotification
+                                                                        object:nil];
+                };
+                hideHeader;
+            }),
             ({
                 SPKSetting *row = [SPKSetting switchCellWithTitle:@"Hide comment bar"
                                                              icon:SPKSettingsIcon(@"comment")

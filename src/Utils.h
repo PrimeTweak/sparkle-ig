@@ -15,6 +15,7 @@ FOUNDATION_EXPORT void SPKLogMessage(NSString *category,
 
 /// Master toggle for per-account preferences (global, default off).
 FOUNDATION_EXPORT NSString *const kSPKPrefPerAccountSettings;
+FOUNDATION_EXPORT NSNotificationName const SPKHideExploreGridPreferenceDidChangeNotification;
 
 /// Maps a preference key to the key actually stored/read. When per-account mode
 /// is on and the key isn't forced-global, returns a `u_<accountPK>_<key>`

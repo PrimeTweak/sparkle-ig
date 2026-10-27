@@ -23,6 +23,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)retryJobID:(NSString *)jobID;
 - (void)retryItemID:(NSString *)itemID inJobID:(NSString *)jobID;
 - (void)clearFinishedHistory;
+/// Clears finished jobs owned by `accountPK` and ownerless ones; nil clears every account.
+- (void)clearFinishedHistoryForAccountPK:(nullable NSString *)accountPK;
 - (void)refreshConcurrencyLimit;
 - (void)removeJobID:(NSString *)jobID;
 

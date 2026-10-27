@@ -9,10 +9,6 @@
 #import "../../App/SPKPerfMeter.h"
 
 static NSInteger const kSPKReelsActionButtonTag = 921342;
-static const void *kSPKReelsActionBottomConstraintAssocKey = &kSPKReelsActionBottomConstraintAssocKey;
-static const void *kSPKReelsActionCenterXConstraintAssocKey = &kSPKReelsActionCenterXConstraintAssocKey;
-static const void *kSPKReelsActionWidthConstraintAssocKey = &kSPKReelsActionWidthConstraintAssocKey;
-static const void *kSPKReelsActionHeightConstraintAssocKey = &kSPKReelsActionHeightConstraintAssocKey;
 static const void *kSPKReelsActionButtonMediaKey = &kSPKReelsActionButtonMediaKey;
 static const void *kSPKReelsActionButtonCarouselIndexKey = &kSPKReelsActionButtonCarouselIndexKey;
 static CGFloat const kSPKReelsActionButtonSize = 44.0;
@@ -71,6 +67,27 @@ static void SPKApplyReelsNativeUFIColor(UIButton *button, UIColor *color) {
         if (image && image.renderingMode != UIImageRenderingModeAlwaysTemplate)
             chromeButton.iconView.image = [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     }
+}
+
+// The button lives beside the UFI and misses the shadow the UFI casts from its
+// subtree, so that shadow is copied onto the icon. When the UFI casts none, the
+// style's default glyph shadow stays.
+static void SPKMirrorReelsUFIShadow(UIButton *button, UIView *verticalUFIView) {
+    if (![button isKindOfClass:[SPKChromeButton class]] || !verticalUFIView)
+        return;
+    CALayer *source = verticalUFIView.layer;
+    if (source.shadowOpacity <= 0.0 || !source.shadowColor)
+        return;
+
+    CALayer *target = ((SPKChromeButton *)button).iconView.layer;
+    if (target.shadowOpacity != source.shadowOpacity)
+        target.shadowOpacity = source.shadowOpacity;
+    if (target.shadowRadius != source.shadowRadius)
+        target.shadowRadius = source.shadowRadius;
+    if (!CGSizeEqualToSize(target.shadowOffset, source.shadowOffset))
+        target.shadowOffset = source.shadowOffset;
+    if (!CGColorEqualToColor(target.shadowColor, source.shadowColor))
+        target.shadowColor = source.shadowColor;
 }
 
 // MARK: - View hierarchy helpers
@@ -407,25 +424,106 @@ static SPKActionButtonContext *SPKReelsActionContext(UIView *verticalUFIView) {
     return context;
 }
 
-// MARK: - Layout check
+// MARK: - Layout
 
-static BOOL SPKReelsConstraintMatches(NSLayoutConstraint *constraint, CGFloat constant) {
-    return constraint && constraint.active && ABS(constraint.constant - constant) < 0.5;
+// Placed by frame, outside the constraint engine: a constraint pinning the button
+// above the UFI made Instagram's container grow by the overhang, which pushed the
+// reel content up on the next full layout pass.
+static CGRect SPKReelsActionButtonFrame(UIView *host, UIView *verticalUFIView) {
+    CGRect ufiFrame = [host convertRect:verticalUFIView.bounds fromView:verticalUFIView];
+    if (CGRectIsEmpty(ufiFrame) && CGRectIsEmpty(verticalUFIView.bounds))
+        return CGRectZero;
+
+    CGFloat bottom = CGRectGetMinY(ufiFrame) + kSPKReelsActionButtonBottomOffset;
+    return CGRectMake(CGRectGetMidX(ufiFrame) - kSPKReelsActionButtonSize / 2.0,
+                      bottom - kSPKReelsActionButtonSize,
+                      kSPKReelsActionButtonSize,
+                      kSPKReelsActionButtonSize);
+}
+
+static void SPKApplyReelsActionButtonFrame(UIButton *button, UIView *host, UIView *verticalUFIView) {
+    if (!button || !host || !verticalUFIView)
+        return;
+
+    CGRect frame = SPKReelsActionButtonFrame(host, verticalUFIView);
+    if (CGRectIsEmpty(frame))
+        return;
+    if (!CGRectEqualToRect(button.frame, frame))
+        button.frame = frame;
+}
+
+static UIButton *SPKReelsHostedActionButton(UIView *verticalUFIView);
+
+// Hosted beside the overlay's Metal layer view, where Instagram puts its own media
+// buttons, so the overlay container Instagram measures to position the media
+// never contains it.
+static UIView *SPKReelsActionButtonHost(UIView *verticalUFIView) {
+    UIView *node = verticalUFIView.superview;
+    for (NSInteger depth = 0; node && depth < 4; depth++) {
+        if ([NSStringFromClass(node.class) containsString:@"MetalLayerView"] && node.superview)
+            return node.superview;
+        node = node.superview;
+    }
+    return verticalUFIView.superview ?: verticalUFIView;
+}
+
+// Moving the UFI's origin does not run its layoutSubviews, so the button follows
+// from the UFI's position setters, which also keeps it inside the same animation
+// during the interactive dismissal.
+static void SPKReelsRepositionActionButton(UIView *verticalUFIView) {
+    UIView *host = SPKReelsActionButtonHost(verticalUFIView);
+    if (!host)
+        return;
+
+    UIButton *button = SPKReelsHostedActionButton(verticalUFIView);
+    if (!button)
+        return;
+
+    SPKApplyReelsActionButtonFrame(button, host, verticalUFIView);
 }
 
 static BOOL SPKReelsActionButtonLayoutIsCurrent(UIButton *button) {
-    if (![button isKindOfClass:[UIButton class]] || button.hidden || !button.superview)
-        return NO;
+    return [button isKindOfClass:[UIButton class]] && !button.hidden && button.superview != nil;
+}
 
-    NSLayoutConstraint *bottomConstraint = objc_getAssociatedObject(button, kSPKReelsActionBottomConstraintAssocKey);
-    NSLayoutConstraint *centerXConstraint = objc_getAssociatedObject(button, kSPKReelsActionCenterXConstraintAssocKey);
-    NSLayoutConstraint *widthConstraint = objc_getAssociatedObject(button, kSPKReelsActionWidthConstraintAssocKey);
-    NSLayoutConstraint *heightConstraint = objc_getAssociatedObject(button, kSPKReelsActionHeightConstraintAssocKey);
+// MARK: - Visibility
 
-    return SPKReelsConstraintMatches(bottomConstraint, kSPKReelsActionButtonBottomOffset) &&
-           centerXConstraint && centerXConstraint.active &&
-           SPKReelsConstraintMatches(widthConstraint, kSPKReelsActionButtonSize) &&
-           SPKReelsConstraintMatches(heightConstraint, kSPKReelsActionButtonSize);
+static UIButton *SPKReelsHostedActionButton(UIView *verticalUFIView) {
+    for (UIView *subview in SPKReelsActionButtonHost(verticalUFIView).subviews) {
+        if (subview.tag == kSPKReelsActionButtonTag && [subview isKindOfClass:[UIButton class]])
+            return (UIButton *)subview;
+    }
+    return nil;
+}
+
+// As a sibling of the UFI, the button follows the UFI's fades from its alpha and
+// hidden setters. The alpha source makes the overlay's wholesale subview fades
+// follow the UFI too, instead of stranding the button at zero.
+static void SPKReelsSyncActionButtonVisibility(UIView *verticalUFIView) {
+    UIButton *button = SPKReelsHostedActionButton(verticalUFIView);
+    if (!button)
+        return;
+    if ([button isKindOfClass:[SPKActionMenuButton class]] && ((SPKActionMenuButton *)button).spk_alphaSource != verticalUFIView)
+        ((SPKActionMenuButton *)button).spk_alphaSource = verticalUFIView;
+    CGFloat alpha = verticalUFIView.hidden ? 0.0 : verticalUFIView.alpha;
+    if (ABS(button.alpha - alpha) > 0.001)
+        button.alpha = alpha;
+}
+
+// MARK: - UFI EDR
+
+// The UFI layer rasterizes and its cache clamps to SDR unless the layer wants EDR.
+// The button used to set this from inside the UFI; hosted beside it, the flag is
+// set directly so Instagram's HDR glyphs do not render dim.
+static void SPKEnableReelsUFIEDR(UIView *verticalUFIView) {
+    CALayer *layer = verticalUFIView.layer;
+    SEL getter = NSSelectorFromString(@"wantsExtendedDynamicRangeContent");
+    SEL setter = NSSelectorFromString(@"setWantsExtendedDynamicRangeContent:");
+    if (![layer respondsToSelector:getter] || ![layer respondsToSelector:setter])
+        return;
+    if (((BOOL (*)(id, SEL))objc_msgSend)(layer, getter))
+        return;
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(layer, setter, YES);
 }
 
 // MARK: - Installer (with media-change gate — Layer 1)
@@ -434,16 +532,39 @@ void SPKInstallReelsActionButton(UIView *verticalUFIView) {
     if (!verticalUFIView)
         return;
 
-    UIButton *button = (UIButton *)[verticalUFIView viewWithTag:kSPKReelsActionButtonTag];
+    // Hosted beside the UFI, not inside it: as a sublayer of the rasterized UFI the
+    // button turned into an opaque black shape on the touch highlight and the
+    // context-menu morph.
+    UIView *host = SPKReelsActionButtonHost(verticalUFIView);
+    // Earlier builds hosted the button inside the UFI or the overlay container;
+    // a stale one there is removed.
+    for (UIView *previousHost in @[ verticalUFIView, verticalUFIView.superview ?: verticalUFIView ]) {
+        if (previousHost == host)
+            continue;
+        UIView *stale = [previousHost viewWithTag:kSPKReelsActionButtonTag];
+        if (stale)
+            [stale removeFromSuperview];
+    }
+
+    UIButton *button = SPKReelsHostedActionButton(verticalUFIView);
     if (![SPKUtils getBoolPref:@"reels_action_btn"]) {
         [button removeFromSuperview];
         return;
     }
 
-    // This must run before the layout/media early return: HDR/EDR changes can
-    // update Instagram's like tint without changing the reel or our constraints.
-    if (button)
+    SPKEnableReelsUFIEDR(verticalUFIView);
+    SPKReelsSyncActionButtonVisibility(verticalUFIView);
+    // Siblings are added and reordered on cell reuse; keep the button on top.
+    if (button && host.subviews.lastObject != button)
+        [host bringSubviewToFront:button];
+
+    // Before the media early return: HDR/EDR can change Instagram's like tint, and
+    // the UFI can move, without the reel or the carousel index changing.
+    if (button) {
         SPKApplyReelsNativeUFIColor(button, SPKReelsNativeUFIColor(verticalUFIView));
+        SPKMirrorReelsUFIShadow(button, verticalUFIView);
+        SPKApplyReelsActionButtonFrame(button, host, verticalUFIView);
+    }
 
     // Resolve current media to detect whether we need to reconfigure
     id currentMedia = SPKReelsMediaProvider(verticalUFIView);
@@ -458,7 +579,8 @@ void SPKInstallReelsActionButton(UIView *verticalUFIView) {
         return;
     }
 
-    button = SPKActionButtonWithTag(verticalUFIView, kSPKReelsActionButtonTag);
+    button = button ?: SPKActionButtonWithTag(host, kSPKReelsActionButtonTag);
+    SPKReelsSyncActionButtonVisibility(verticalUFIView);
     SPKConfigureActionButton(button, SPKReelsActionContext(verticalUFIView));
 
     // Store the resolved media + carousel index for change detection on next call
@@ -468,35 +590,14 @@ void SPKInstallReelsActionButton(UIView *verticalUFIView) {
     if (button.hidden)
         return;
 
-    button.translatesAutoresizingMaskIntoConstraints = NO;
+    button.translatesAutoresizingMaskIntoConstraints = YES;
+    button.autoresizingMask = UIViewAutoresizingNone;
+    SPKApplyReelsActionButtonFrame(button, host, verticalUFIView);
 
-    NSLayoutConstraint *bottomConstraint = objc_getAssociatedObject(button, kSPKReelsActionBottomConstraintAssocKey);
-    NSLayoutConstraint *centerXConstraint = objc_getAssociatedObject(button, kSPKReelsActionCenterXConstraintAssocKey);
-    NSLayoutConstraint *widthConstraint = objc_getAssociatedObject(button, kSPKReelsActionWidthConstraintAssocKey);
-    NSLayoutConstraint *heightConstraint = objc_getAssociatedObject(button, kSPKReelsActionHeightConstraintAssocKey);
-
-    if (!bottomConstraint || !centerXConstraint || !widthConstraint || !heightConstraint) {
-        bottomConstraint = [button.bottomAnchor constraintEqualToAnchor:verticalUFIView.topAnchor constant:kSPKReelsActionButtonBottomOffset];
-        centerXConstraint = [button.centerXAnchor constraintEqualToAnchor:verticalUFIView.centerXAnchor];
-        widthConstraint = [button.widthAnchor constraintEqualToConstant:kSPKReelsActionButtonSize];
-        heightConstraint = [button.heightAnchor constraintEqualToConstant:kSPKReelsActionButtonSize];
-        [NSLayoutConstraint activateConstraints:@[ bottomConstraint, centerXConstraint, widthConstraint, heightConstraint ]];
-
-        objc_setAssociatedObject(button, kSPKReelsActionBottomConstraintAssocKey, bottomConstraint, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(button, kSPKReelsActionCenterXConstraintAssocKey, centerXConstraint, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(button, kSPKReelsActionWidthConstraintAssocKey, widthConstraint, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(button, kSPKReelsActionHeightConstraintAssocKey, heightConstraint, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-
-    bottomConstraint.constant = kSPKReelsActionButtonBottomOffset;
-    widthConstraint.constant = kSPKReelsActionButtonSize;
-    heightConstraint.constant = kSPKReelsActionButtonSize;
-
-    verticalUFIView.clipsToBounds = NO;
-    verticalUFIView.layer.masksToBounds = NO;
-    [verticalUFIView bringSubviewToFront:button];
+    [host bringSubviewToFront:button];
     SPKApplyButtonStyle(button, SPKActionButtonSourceReels);
     SPKApplyReelsNativeUFIColor(button, SPKReelsNativeUFIColor(verticalUFIView));
+    SPKMirrorReelsUFIShadow(button, verticalUFIView);
 }
 
 %group SPKReelsActionButtonHooks
@@ -506,6 +607,31 @@ void SPKInstallReelsActionButton(UIView *verticalUFIView) {
     %orig;
     SPK_PERF_SCOPE(@"ReelsActionButton.layoutSubviews");
     SPKInstallReelsActionButton((UIView *)self);
+}
+
+- (void)setFrame:(CGRect)frame {
+    %orig;
+    SPKReelsRepositionActionButton((UIView *)self);
+}
+
+- (void)setCenter:(CGPoint)center {
+    %orig;
+    SPKReelsRepositionActionButton((UIView *)self);
+}
+
+- (void)setAlpha:(CGFloat)alpha {
+    %orig;
+    SPKReelsSyncActionButtonVisibility((UIView *)self);
+}
+
+- (void)setHidden:(BOOL)hidden {
+    %orig;
+    SPKReelsSyncActionButtonVisibility((UIView *)self);
+}
+
+- (void)didMoveToSuperview {
+    %orig;
+    SPKReelsSyncActionButtonVisibility((UIView *)self);
 }
 %end
 

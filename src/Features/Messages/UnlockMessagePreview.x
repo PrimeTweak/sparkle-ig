@@ -1,5 +1,7 @@
 #import "../../InstagramHeaders.h"
 #import "../../Utils.h"
+#import "../../Shared/Messages/SPKDirectInboxMenu.h"
+#import <objc/runtime.h>
 
 // "Message Preview" (peek a DM thread from the inbox without sending read receipts)
 // is an Instagram Plus feature. Overriding these classes allows unlocking it.
@@ -12,7 +14,66 @@ static inline BOOL SPKUnlockMessagePreviewEnabled(void) {
     return [SPKUtils getBoolPref:@"msgs_unlock_preview"];
 }
 
+static UIMenu *SPKMessagePreviewMenuByRemovingUpsell(UIMenu *menu) {
+    NSMutableArray<UIMenuElement *> *filteredChildren = [menu.children mutableCopy];
+    NSMutableArray<UIAction *> *subtitledActions = [NSMutableArray array];
+    for (UIMenuElement *element in menu.children ?: @[]) {
+        if ([element isKindOfClass:[UIAction class]] && ((UIAction *)element).subtitle.length > 0)
+            [subtitledActions addObject:(UIAction *)element];
+    }
+
+    // The subscription row has no stable identifier and localized copy, but it is
+    // the only action with a subtitle; it is removed only when that is unambiguous.
+    if (subtitledActions.count != 1)
+        return menu;
+
+    [filteredChildren removeObjectIdenticalTo:subtitledActions.firstObject];
+    return [menu menuByReplacingChildren:filteredChildren];
+}
+
+// Without bypassSeenStateUpdate the preview marks the thread seen. IG 448 dropped the
+// setter; the one-byte Swift Bool ivar is still registered under its bare name.
+static void SPKMessagePreviewBypassSeenState(id preview) {
+    if ([preview respondsToSelector:@selector(setBypassSeenStateUpdate:)]) {
+        [preview setBypassSeenStateUpdate:YES];
+        return;
+    }
+    Ivar ivar = class_getInstanceVariable(object_getClass(preview), "bypassSeenStateUpdate");
+    if (!ivar) {
+        SPKLog(@"Messages", @"[Sparkle MessagePreview] bypassSeenStateUpdate not found; preview may mark the thread seen");
+        return;
+    }
+    *((uint8_t *)(__bridge void *)preview + ivar_getOffset(ivar)) = 1;
+}
+
 %group SPKUnlockMessagePreviewHooks
+
+%hook _TtC29IGConsumerSubsDirectChatPeeks35IGDirectInboxChatPeekPreviewHandler
+
+- (id)previewViewControllerForThreadId:(id)threadId userSession:(id)session containerWidth:(double)width {
+    if (!SPKUnlockMessagePreviewEnabled())
+        return %orig;
+
+    Class previewClass = NSClassFromString(@"_TtC39IGDirectLightweightThreadViewController39IGDirectLightweightThreadViewController");
+    SEL initializer = @selector(initWithUserSession:threadId:onLoadCompletion:);
+    if (!previewClass || ![previewClass instancesRespondToSelector:initializer])
+        return %orig;
+
+    id preview = [[previewClass alloc] initWithUserSession:session
+                                                  threadId:threadId
+                                           onLoadCompletion:nil];
+    if (!preview)
+        return %orig;
+
+    if ([preview respondsToSelector:@selector(setShouldHideHeader:)])
+        [preview setShouldHideHeader:YES];
+    SPKMessagePreviewBypassSeenState(preview);
+    if ([preview respondsToSelector:@selector(setShouldSkipScrollToNewMessagesSeparator:)])
+        [preview setShouldSkipScrollToNewMessagesSeparator:YES];
+    return preview;
+}
+
+%end
 
 // Demangled: IGConsumerSubsDirectChatPeeks.IGConsumerSubsDirectChatPeekEligibility
 %hook _TtC29IGConsumerSubsDirectChatPeeks39IGConsumerSubsDirectChatPeekEligibility
@@ -25,6 +86,15 @@ static inline BOOL SPKUnlockMessagePreviewEnabled(void) {
 }
 
 + (BOOL)isUpsellEligibleWithLauncherSet:(id)set consumerSubsService:(id)service {
+    if (SPKUnlockMessagePreviewEnabled()) {
+        return NO;
+    }
+    return %orig;
+}
+
+// IG 442 replaced the launcher set and service arguments with a session argument;
+// older builds lack this selector, so the hook binds nothing there.
++ (BOOL)isUpsellEligibleWithSession:(id)session {
     if (SPKUnlockMessagePreviewEnabled()) {
         return NO;
     }
@@ -67,9 +137,6 @@ static inline BOOL SPKUnlockMessagePreviewEnabled(void) {
 %end
 
 void SPKInstallUnlockMessagePreviewHooksIfEnabled(void) {
-    if (!SPKUnlockMessagePreviewEnabled())
-        return;
-
     // Check if the eligibility class exists in the current Instagram runtime
     if (NSClassFromString(@"_TtC29IGConsumerSubsDirectChatPeeks39IGConsumerSubsDirectChatPeekEligibility") == nil) {
         return;
@@ -78,5 +145,11 @@ void SPKInstallUnlockMessagePreviewHooksIfEnabled(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         %init(SPKUnlockMessagePreviewHooks);
+        SPKDirectInboxMenuRegisterTransformer(@"message_preview", 0, ^UIMenu *(SPKDirectThreadContext *context, id viewModel, UIMenu *menu) {
+            (void)context;
+            (void)viewModel;
+            return SPKUnlockMessagePreviewEnabled() ? SPKMessagePreviewMenuByRemovingUpsell(menu) : menu;
+        });
+        SPKDirectInboxMenuInstallHooksIfNeeded();
     });
 }

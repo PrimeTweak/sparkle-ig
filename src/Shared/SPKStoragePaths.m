@@ -104,8 +104,4 @@ static NSString *SPKStorageFeatureDirectory(NSString *featureName) {
     return SPKStorageFeatureDirectory(@"Fonts");
 }
 
-+ (NSString *)languagePacksDirectory {
-    return SPKStorageFeatureDirectory(@"Languages");
-}
-
 @end

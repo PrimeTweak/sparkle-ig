@@ -1,9 +1,12 @@
 // Story Mentions — Gallery-style bottom sheet listing mentioned users with Follow/Following buttons.
-// Triggered by the @ button in story overlays (SeenButtons.x).
+// Triggered by the @ button in story overlays; the list comes from SPKStoryMentions, the deduped
+// source shared with that button.
 
 #import "../../AssetUtils.h"
 #import "../../InstagramHeaders.h"
 #import "../../Networking/SPKInstagramAPI.h"
+#import "../../Shared/Account/SPKAccountManager.h"
+#import "../../Shared/Stories/SPKStoryMentions.h"
 #import "../../Shared/UI/SPKMediaChrome.h"
 #import "../../Shared/UI/SPKNotificationCenter.h"
 #import "../../Utils.h"
@@ -13,79 +16,27 @@
 extern void SPKPauseStoryPlaybackFromOverlaySubview(UIView *view);
 extern void SPKResumeStoryPlaybackFromOverlaySubview(UIView *view);
 
-static NSMutableDictionary<NSString *, NSArray<NSDictionary *> *> *SPKStoryMentionsSessionCache;
 static NSMutableDictionary<NSString *, NSDictionary *> *SPKStoryMentionsFriendshipStatusCache;
 static NSCache<NSString *, UIImage *> *SPKStoryMentionsAvatarCache;
 
 static void SPKStoryMentionsEnsureSessionCaches(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        SPKStoryMentionsSessionCache = [NSMutableDictionary dictionary];
         SPKStoryMentionsFriendshipStatusCache = [NSMutableDictionary dictionary];
         SPKStoryMentionsAvatarCache = [[NSCache alloc] init];
         SPKStoryMentionsAvatarCache.countLimit = 128;
+        // Friendship status is relative to the viewing account, so nothing cached for
+        // one account is shown to another.
+        [[NSNotificationCenter defaultCenter] addObserverForName:SPKAccountDidChangeNotification
+                                                          object:nil
+                                                           queue:[NSOperationQueue mainQueue]
+                                                      usingBlock:^(__unused NSNotification *note) {
+            [SPKStoryMentionsFriendshipStatusCache removeAllObjects];
+        }];
     });
 }
 
-static NSString *SPKStoryMentionsCacheKeyForMedia(id media) {
-    if (!media)
-        return nil;
-    for (NSString *selectorName in @[ @"pk", @"id", @"mediaID", @"mediaId", @"code", @"shortCode", @"shortcode" ]) {
-        id value = nil;
-        @try {
-            SEL selector = NSSelectorFromString(selectorName);
-            if ([media respondsToSelector:selector])
-                value = ((id (*)(id, SEL))objc_msgSend)(media, selector);
-        } @catch (__unused id e) {
-        }
-        NSString *string = value ? [NSString stringWithFormat:@"%@", value] : nil;
-        if (string.length > 0)
-            return [NSString stringWithFormat:@"%@:%@", selectorName, string];
-    }
-    return [NSString stringWithFormat:@"ptr:%p", media];
-}
-
-// ============ User PK extraction ============
-
-// IGUser stores fields in a Pando-backed dictionary (_fieldCache).
-// Standard KVC may return NSNull, so we read the dict directly.
-static id SPKMentionFieldCacheValue(id obj, NSString *key) {
-    if (!obj || !key)
-        return nil;
-    static Ivar fcIvar = NULL;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        Class c = NSClassFromString(@"IGAPIStorableObject");
-        if (c)
-            fcIvar = class_getInstanceVariable(c, "_fieldCache");
-    });
-    if (!fcIvar)
-        return nil;
-    NSDictionary *fc = object_getIvar(obj, fcIvar);
-    if (!fc || ![fc isKindOfClass:[NSDictionary class]])
-        return nil;
-    id val = fc[key];
-    if (!val || [val isKindOfClass:[NSNull class]])
-        return nil;
-    return val;
-}
-
-static NSString *SPKMentionUserPK(id userObj) {
-    if (!userObj)
-        return nil;
-    id pk = SPKMentionFieldCacheValue(userObj, @"strong_id__");
-    if (!pk)
-        pk = SPKMentionFieldCacheValue(userObj, @"pk");
-    if (!pk) {
-        @try {
-            Ivar pkIvar = class_getInstanceVariable([userObj class], "_pk");
-            if (pkIvar)
-                pk = object_getIvar(userObj, pkIvar);
-        } @catch (__unused id e) {
-        }
-    }
-    return pk ? [NSString stringWithFormat:@"%@", pk] : nil;
-}
+static const void *kSPKMentionButtonPKKey = &kSPKMentionButtonPKKey;
 
 static void SPKMentionStyleFollowButton(UIButton *btn, BOOL following) {
     [btn setTitle:following ? @"Following" : @"Follow" forState:UIControlStateNormal];
@@ -99,124 +50,6 @@ static void SPKMentionStyleFollowButton(UIButton *btn, BOOL following) {
     btn.layer.borderWidth = 0.0;
     btn.layer.cornerRadius = 8.0;
     btn.clipsToBounds = YES;
-}
-
-// ============ Enhanced mention extraction ============
-
-// Enriched version that also extracts userObj, pk, and profile_pic_url
-// (the SeenButtons.x version only extracts username and fullName)
-static NSArray<NSDictionary *> *SPKStoryMentionsEnriched(UIView *overlayView) {
-    if (!overlayView)
-        return @[];
-
-    // Use the same resolution path as SeenButtons.x
-    id media = nil;
-    @try {
-        // Walk up to find IGStoryViewerViewController or IGStoryItemMediaView
-        UIView *v = overlayView;
-        for (NSInteger i = 0; i < 25 && v; i++, v = v.superview) {
-            // Try the media view first
-            SEL mediaSel = NSSelectorFromString(@"media");
-            if ([v respondsToSelector:mediaSel]) {
-                id candidate = ((id (*)(id, SEL))objc_msgSend)(v, mediaSel);
-                if (candidate && [candidate respondsToSelector:NSSelectorFromString(@"reelMentions")]) {
-                    media = candidate;
-                    break;
-                }
-            }
-        }
-
-        // Fallback: try the view controller hierarchy
-        if (!media) {
-            UIResponder *r = overlayView;
-            while (r) {
-                if ([r isKindOfClass:[UIViewController class]]) {
-                    UIViewController *vc = (UIViewController *)r;
-                    // Try currentStoryItem
-                    SEL csi = NSSelectorFromString(@"currentStoryItem");
-                    if ([vc respondsToSelector:csi]) {
-                        id item = ((id (*)(id, SEL))objc_msgSend)(vc, csi);
-                        if ([item respondsToSelector:NSSelectorFromString(@"reelMentions")]) {
-                            media = item;
-                            break;
-                        }
-                    }
-                    // Try currentItem
-                    SEL ci = NSSelectorFromString(@"currentItem");
-                    if ([vc respondsToSelector:ci]) {
-                        id item = ((id (*)(id, SEL))objc_msgSend)(vc, ci);
-                        if ([item respondsToSelector:NSSelectorFromString(@"reelMentions")]) {
-                            media = item;
-                            break;
-                        }
-                    }
-                }
-                r = r.nextResponder;
-            }
-        }
-    } @catch (__unused id e) {
-    }
-
-    if (!media)
-        return @[];
-
-    SPKStoryMentionsEnsureSessionCaches();
-    NSString *cacheKey = SPKStoryMentionsCacheKeyForMedia(media);
-    NSArray<NSDictionary *> *cached = cacheKey.length > 0 ? SPKStoryMentionsSessionCache[cacheKey] : nil;
-    if (cached)
-        return cached;
-
-    SEL mentionsSel = NSSelectorFromString(@"reelMentions");
-    if (![media respondsToSelector:mentionsSel])
-        return @[];
-    id mentionsCollection = ((id (*)(id, SEL))objc_msgSend)(media, mentionsSel);
-
-    NSArray *mentions = nil;
-    if ([mentionsCollection isKindOfClass:[NSArray class]]) {
-        mentions = (NSArray *)mentionsCollection;
-    } else if ([mentionsCollection isKindOfClass:[NSSet class]]) {
-        mentions = [(NSSet *)mentionsCollection allObjects];
-    } else if ([mentionsCollection isKindOfClass:[NSOrderedSet class]]) {
-        mentions = [(NSOrderedSet *)mentionsCollection array];
-    }
-    if (mentions.count == 0)
-        return @[];
-
-    NSMutableArray<NSDictionary *> *userInfos = [NSMutableArray array];
-    for (id mention in mentions) {
-        id user = nil;
-        @try {
-            user = [mention valueForKey:@"user"];
-        } @catch (__unused id e) {
-        }
-        if (!user)
-            continue;
-
-        NSMutableDictionary *info = [NSMutableDictionary dictionary];
-        info[@"userObj"] = user;
-
-        NSString *username = SPKMentionFieldCacheValue(user, @"username");
-        if (username.length)
-            info[@"username"] = username;
-
-        NSString *fullName = SPKMentionFieldCacheValue(user, @"full_name");
-        if (fullName.length)
-            info[@"fullName"] = fullName;
-
-        NSString *picStr = SPKMentionFieldCacheValue(user, @"profile_pic_url");
-        if (picStr.length) {
-            NSURL *picURL = [NSURL URLWithString:picStr];
-            if (picURL)
-                info[@"picURL"] = picURL;
-        }
-
-        if (info.count > 1)
-            [userInfos addObject:info]; // must have userObj + at least one other field
-    }
-    NSArray<NSDictionary *> *result = [userInfos copy];
-    if (cacheKey.length > 0)
-        SPKStoryMentionsSessionCache[cacheKey] = result;
-    return result;
 }
 
 /// ============ Bottom sheet VC ============
@@ -305,7 +138,7 @@ static NSArray<NSDictionary *> *SPKStoryMentionsEnriched(UIView *overlayView) {
 
 @end
 @interface SPKStoryMentionsVC : UIViewController <UITableViewDataSource, UITableViewDelegate>
-@property (nonatomic, strong) NSArray<NSDictionary *> *userInfos;
+@property (nonatomic, strong) NSArray<SPKStoryMention *> *mentions;
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) NSString *currentUsername;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSDictionary *> *friendshipStatuses;
@@ -356,8 +189,8 @@ static NSArray<NSDictionary *> *SPKStoryMentionsEnriched(UIView *overlayView) {
     SPKStoryMentionsEnsureSessionCaches();
     self.friendshipStatuses = [NSMutableDictionary dictionary];
     NSMutableArray<NSString *> *missingPKs = [NSMutableArray array];
-    for (NSDictionary *info in self.userInfos) {
-        NSString *pk = SPKMentionUserPK(info[@"userObj"]);
+    for (SPKStoryMention *mention in self.mentions) {
+        NSString *pk = mention.pk;
         if (!pk.length)
             continue;
         NSDictionary *cachedStatus = SPKStoryMentionsFriendshipStatusCache[pk];
@@ -404,7 +237,7 @@ static NSArray<NSDictionary *> *SPKStoryMentionsEnriched(UIView *overlayView) {
 #pragma mark - UITableViewDataSource
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.userInfos.count;
+    return self.mentions.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -414,10 +247,10 @@ static NSArray<NSDictionary *> *SPKStoryMentionsEnriched(UIView *overlayView) {
         cell = [[SPKMentionCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:rid];
     }
 
-    NSDictionary *info = self.userInfos[indexPath.row];
-    NSString *username = info[@"username"] ?: @"Unknown";
-    NSString *fullName = info[@"fullName"];
-    NSURL *picURL = info[@"picURL"];
+    SPKStoryMention *mention = self.mentions[indexPath.row];
+    NSString *username = mention.username ?: @"Unknown";
+    NSString *fullName = mention.fullName;
+    NSURL *picURL = mention.profilePictureURL;
 
     cell.nameLabel.text = username;
     cell.subLabel.text = fullName ?: @"";
@@ -472,23 +305,23 @@ static NSArray<NSDictionary *> *SPKStoryMentionsEnriched(UIView *overlayView) {
     [cell.followBtn removeTarget:nil action:NULL forControlEvents:UIControlEventTouchUpInside];
     [cell.spinner stopAnimating];
     cell.spinner.color = [SPKUtils SPKColor_InstagramSecondaryText];
+    // A recycled button may arrive mid-request from its previous row.
+    cell.followBtn.userInteractionEnabled = YES;
 
     BOOL isMe = self.currentUsername && [username isEqualToString:self.currentUsername];
     if (isMe) {
         cell.followBtn.hidden = YES;
     } else {
         cell.followBtn.hidden = NO;
-        id userObj = info[@"userObj"];
-
         BOOL following = NO;
-        NSString *pk = SPKMentionUserPK(userObj);
+        NSString *pk = mention.pk;
         NSDictionary *status = pk ? self.friendshipStatuses[pk] : nil;
         if ([status isKindOfClass:[NSDictionary class]]) {
             following = [status[@"following"] boolValue];
         }
         SPKMentionStyleFollowButton(cell.followBtn, following);
 
-        objc_setAssociatedObject(cell.followBtn, "userObj", userObj, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(cell.followBtn, kSPKMentionButtonPKKey, pk, OBJC_ASSOCIATION_COPY_NONATOMIC);
         [cell.followBtn addTarget:self action:@selector(spk_followTapped:) forControlEvents:UIControlEventTouchUpInside];
     }
 
@@ -498,10 +331,7 @@ static NSArray<NSDictionary *> *SPKStoryMentionsEnriched(UIView *overlayView) {
 #pragma mark - Follow/Unfollow
 
 - (void)spk_followTapped:(UIButton *)sender {
-    id userObj = objc_getAssociatedObject(sender, "userObj");
-    if (!userObj)
-        return;
-    NSString *pk = SPKMentionUserPK(userObj);
+    NSString *pk = objc_getAssociatedObject(sender, kSPKMentionButtonPKKey);
     if (!pk.length)
         return;
 
@@ -522,20 +352,27 @@ static NSArray<NSDictionary *> *SPKStoryMentionsEnriched(UIView *overlayView) {
 
         __weak typeof(self) weakSelf = self;
         SPKAPICompletion done = ^(NSDictionary *response, NSError *error) {
-            [spinner stopAnimating];
-            sender.userInteractionEnabled = YES;
             BOOL ok = (response && [response[@"status"] isEqualToString:@"ok"]);
             if (ok) {
-                SPKMentionStyleFollowButton(sender, !currentlyFollowing);
                 NSMutableDictionary *s = [weakSelf.friendshipStatuses[pk] mutableCopy] ?: [NSMutableDictionary dictionary];
                 s[@"following"] = @(!currentlyFollowing);
                 NSDictionary *updatedStatus = [s copy];
                 weakSelf.friendshipStatuses[pk] = updatedStatus;
                 SPKStoryMentionsEnsureSessionCaches();
                 SPKStoryMentionsFriendshipStatusCache[pk] = updatedStatus;
-            } else {
-                [sender setTitle:savedTitle forState:UIControlStateNormal];
             }
+
+            // The cell may have been recycled onto another user while the request was in
+            // flight; its new row already shows its own state.
+            NSString *currentPK = objc_getAssociatedObject(sender, kSPKMentionButtonPKKey);
+            if (![currentPK isEqualToString:pk])
+                return;
+            [spinner stopAnimating];
+            sender.userInteractionEnabled = YES;
+            if (ok)
+                SPKMentionStyleFollowButton(sender, !currentlyFollowing);
+            else
+                [sender setTitle:savedTitle forState:UIControlStateNormal];
         };
 
         if (currentlyFollowing)
@@ -560,12 +397,12 @@ static NSArray<NSDictionary *> *SPKStoryMentionsEnriched(UIView *overlayView) {
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (indexPath.row < 0 || indexPath.row >= (NSInteger)self.userInfos.count)
+    if (indexPath.row < 0 || indexPath.row >= (NSInteger)self.mentions.count)
         return;
-    NSDictionary *info = self.userInfos[indexPath.row];
-    NSString *username = info[@"username"];
-    id userObj = info[@"userObj"];
-    NSString *pk = SPKMentionUserPK(userObj);
+    SPKStoryMention *mention = self.mentions[indexPath.row];
+    NSString *username = mention.username;
+    id userObj = mention.userObject;
+    NSString *pk = mention.pk;
     if (username.length == 0 && !userObj)
         return;
 
@@ -580,7 +417,7 @@ extern void SPKPauseStoryPlaybackFromOverlaySubview(UIView *);
 extern void SPKResumeStoryPlaybackFromOverlaySubview(UIView *);
 
 void SPKPresentStoryMentionsSheet(UIView *overlayView) {
-    NSArray<NSDictionary *> *enriched = SPKStoryMentionsEnriched(overlayView);
+    NSArray<SPKStoryMention *> *mentions = SPKStoryMentionsForOverlay(overlayView);
 
     UIViewController *presenter = [SPKUtils nearestViewControllerForView:overlayView];
     if (!presenter)
@@ -589,7 +426,7 @@ void SPKPresentStoryMentionsSheet(UIView *overlayView) {
     SPKPauseStoryPlaybackFromOverlaySubview(overlayView);
 
     SPKStoryMentionsVC *vc = [[SPKStoryMentionsVC alloc] init];
-    vc.userInfos = enriched;
+    vc.mentions = mentions;
     vc.storyOverlayView = overlayView;
 
     UINavigationController *nav = [[SPKChromeNavigationController alloc] initWithRootViewController:vc];
@@ -599,7 +436,7 @@ void SPKPresentStoryMentionsSheet(UIView *overlayView) {
 
     if (@available(iOS 16.0, *)) {
         CGFloat headerHeight = 56.0;
-        CGFloat contentHeight = MAX(1, enriched.count) * kSPKMentionRowHeight;
+        CGFloat contentHeight = MAX(1, mentions.count) * kSPKMentionRowHeight;
         CGFloat totalHeight = headerHeight + contentHeight + 40.0;
         UISheetPresentationControllerDetent *customDetent =
             [UISheetPresentationControllerDetent customDetentWithIdentifier:@"custom_fit"

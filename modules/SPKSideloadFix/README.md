@@ -14,7 +14,12 @@ as `NSFileManager` in app-extension processes:
 - fall back to a Documents-backed group path when no app-group URL is available
 - create redirected suite container directories before passing them to defaults
 - leave main-app `NSUserDefaults` on its original container so Instagram's
-  cold-launch UI dismissal flags can persist normally
+  cold-launch UI dismissal flags can persist normally, while mirroring writes
+  from `group.*` suites into the shared container used by app extensions
+
+The group-defaults mirror keeps the notification extension's account state in
+sync with the main app. On multi-account installs the extension can otherwise
+treat a signed-in recipient as logged out and redact or misroute its notification.
 
 It also normalizes Keychain access groups for sideloaded signatures. The four
 intercepted `SecItem` operations resolve a usable group from a sentinel Keychain

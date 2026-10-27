@@ -1,6 +1,7 @@
 #import "../../InstagramHeaders.h"
 #import "../../Utils.h"
 #import "../../App/SPKPerfMeter.h"
+#import <objc/runtime.h>
 
 typedef NS_ENUM(NSInteger, SPKFeedFilterSurface) {
     SPKFeedFilterSurfaceFeed,
@@ -50,6 +51,17 @@ static Class SPKInFeedStoriesTrayModelClass(void) {
     return cls;
 }
 
+// Swift class whose runtime name is mangled, so objc_getClass() on the dotted
+// spelling can miss it.
+static Class SPKThreadsInFeedModelClass(void) {
+    static Class cls;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        cls = SPKResolveIGClass(@"IGThreadsInFeedModels.IGThreadsInFeedModel", nil);
+    });
+    return cls;
+}
+
 static void SPKStoryAdBlockingLogClassAvailability(void) {
     for (NSString *className in @[
              @"IGStoryAdPool",
@@ -87,10 +99,18 @@ static NSArray *removeItemsInList(NSArray *list, SPKFeedFilterSurface surface) {
             }
         }
 
-        // Remove suggested reels (carousel)
+        // Remove suggested reels
         if (isFeed && [SPKUtils getBoolPref:@"feed_hide_suggested_reels"]) {
+            // Carousel
             if ([obj isKindOfClass:%c(IGFeedScrollableClipsModel)]) {
                 SPKLog(@"General", @"[Sparkle] Hiding suggested reels carousel");
+
+                continue;
+            }
+
+            // Newer builds place suggested reels inline as recommended IGMedia items.
+            if ([obj isKindOfClass:%c(IGMedia)] && [((IGMedia *)obj).explorePostInFeed isEqual:@YES] && [obj respondsToSelector:@selector(isClipsMedia)] && [(IGMedia *)obj isClipsMedia]) {
+                SPKLog(@"General", @"[Sparkle] Hiding suggested reel");
 
                 continue;
             }
@@ -119,7 +139,7 @@ static NSArray *removeItemsInList(NSArray *list, SPKFeedFilterSurface surface) {
 
             // Feed (carousel)
             if (isFeed) {
-                if ([obj isKindOfClass:%c(IGBloksFeedUnitModel)] || [obj isKindOfClass:objc_getClass("IGThreadsInFeedModels.IGThreadsInFeedModel")]) {
+                if ([obj isKindOfClass:%c(IGBloksFeedUnitModel)] || [obj isKindOfClass:SPKThreadsInFeedModelClass()]) {
                     SPKLog(@"General", @"[Sparkle] Hiding suggested threads posts (carousel)");
 
                     continue;
@@ -189,16 +209,65 @@ static NSArray *removeItemsInList(NSArray *list, SPKFeedFilterSurface surface) {
 }
 %end
 
+// IGMainFeedSwiftHelpers.IGMainFeedListAdapterDataSource_swift (IG 445+): server-gated
+// Swift twin of the main feed data source; accounts in that group never hit the class above.
+%hook _TtC22IGMainFeedSwiftHelpers37IGMainFeedListAdapterDataSource_swift
+- (NSArray *)objectsForListAdapter:(id)arg1 {
+    return removeItemsInList(%orig, SPKFeedFilterSurfaceFeed);
+}
+%end
+
 %end
 
 %group SPKFeedFilteringDeferredHooks
 
-static NSArray *spkSundialFilterAndLimit(NSArray *list) {
+static id SPKSundialObjectIvar(id object, const char *name) {
+    if (!object || !name)
+        return nil;
+
+    for (Class cls = object_getClass(object); cls; cls = class_getSuperclass(cls)) {
+        Ivar ivar = class_getInstanceVariable(cls, name);
+        if (ivar)
+            return object_getIvar(object, ivar);
+    }
+
+    return nil;
+}
+
+static BOOL SPKSundialBoolForSelector(id object, SEL selector) {
+    if (!object || !selector || ![object respondsToSelector:selector])
+        return NO;
+
+    IMP implementation = [object methodForSelector:selector];
+    return implementation ? ((BOOL (*)(id, SEL))implementation)(object, selector) : NO;
+}
+
+// The doom-scroll cap applies only where the data source's network source reports
+// the Reels home feed or tab.
+static BOOL SPKSundialIsReelsHomeOrTab(id dataSource) {
+    id networkSource = SPKSundialObjectIvar(dataSource, "_networkSource");
+
+    if (!networkSource) {
+        id context = SPKSundialObjectIvar(dataSource, "context");
+        if (!context)
+            context = SPKSundialObjectIvar(dataSource, "_context");
+
+        if ([context respondsToSelector:@selector(networkSource)]) {
+            IMP implementation = [context methodForSelector:@selector(networkSource)];
+            if (implementation)
+                networkSource = ((id (*)(id, SEL))implementation)(context, @selector(networkSource));
+        }
+    }
+
+    return SPKSundialBoolForSelector(networkSource, @selector(isReelsHomeOrTab));
+}
+
+static NSArray *spkSundialFilterAndLimit(NSArray *list, id dataSource) {
     NSArray *filteredList = removeItemsInList(list, SPKFeedFilterSurfaceReels);
 
-    if ([SPKUtils getBoolPref:@"reels_prevent_doom_scroll"]) {
-        double reelCount = [SPKUtils getDoublePref:@"reels_doom_scroll_limit"];
-        return [filteredList subarrayWithRange:NSMakeRange(0, MIN((NSUInteger)reelCount, filteredList.count))];
+    if ([SPKUtils getBoolPref:@"reels_prevent_doom_scroll"] && SPKSundialIsReelsHomeOrTab(dataSource)) {
+        NSUInteger reelCount = (NSUInteger)[SPKUtils getDoublePref:@"reels_doom_scroll_limit"];
+        return [filteredList subarrayWithRange:NSMakeRange(0, MIN(reelCount, filteredList.count))];
     }
 
     return filteredList;
@@ -206,21 +275,21 @@ static NSArray *spkSundialFilterAndLimit(NSArray *list) {
 
 %hook IGSundialFeedDataSource
 - (NSArray *)objectsForListAdapter:(id)arg1 {
-    return spkSundialFilterAndLimit(%orig);
+    return spkSundialFilterAndLimit(%orig, self);
 }
 %end
 
 // Demangled name: IGSundialFeed.IGSundialFeedDataSource (IG <= 433)
 %hook _TtC13IGSundialFeed23IGSundialFeedDataSource
 - (NSArray *)objectsForListAdapter:(id)arg1 {
-    return spkSundialFilterAndLimit(%orig);
+    return spkSundialFilterAndLimit(%orig, self);
 }
 %end
 
 // Demangled name: IGSundialFeedDataSource.IGSundialFeedDataSource (IG 434+, class moved module)
 %hook _TtC23IGSundialFeedDataSource23IGSundialFeedDataSource
 - (NSArray *)objectsForListAdapter:(id)arg1 {
-    return spkSundialFilterAndLimit(%orig);
+    return spkSundialFilterAndLimit(%orig, self);
 }
 %end
 

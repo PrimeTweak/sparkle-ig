@@ -5,6 +5,7 @@
 #import "../../AssetUtils.h"
 #import "../../InstagramHeaders.h"
 #import "../../Shared/Messages/SPKDirectAutoSave.h"
+#import "../../Shared/Messages/SPKDirectInboxMenu.h"
 #import "../../Shared/Messages/SPKDirectSeenContext.h"
 #import "../../Shared/Stories/SPKStoryContext.h"
 #import "../../Shared/UI/SPKChrome.h"
@@ -526,119 +527,35 @@ static void SPKDirectClearActiveThreadContextForController(id controller, NSStri
     objc_setAssociatedObject(controller, kSPKDirectThreadIdAssocKey, nil, OBJC_ASSOCIATION_ASSIGN);
 }
 
-static id (*SPKDirectOrigInboxContextMenuConfiguration)(id, SEL, id);
-
-static id SPKDirectInboxContextMenuConfiguration(id self, SEL _cmd, id indexPath) {
-    id configuration = SPKDirectOrigInboxContextMenuConfiguration(self, _cmd, indexPath);
-    if (![configuration isKindOfClass:[UIContextMenuConfiguration class]])
-        return configuration;
-
-    id adapter = SPKKVCObject(self, @"listAdapter");
-    if (!adapter)
-        adapter = [SPKUtils getIvarForObj:self name:"_listAdapter"];
-    if (!adapter || ![indexPath respondsToSelector:@selector(section)]) {
-        SPKLog(@"Messages", @"[Sparkle MessagesSeen] Inbox menu context skipped: missing adapter/indexPath controller=%@<%p>",
-               NSStringFromClass([self class]),
-               self);
-        return configuration;
-    }
-
-    SEL sectionControllerSelector = NSSelectorFromString(@"sectionControllerForSection:");
-    if (![adapter respondsToSelector:sectionControllerSelector]) {
-        SPKLog(@"Messages", @"[Sparkle MessagesSeen] Inbox menu context skipped: adapter lacks sectionControllerForSection adapter=%@<%p>",
-               NSStringFromClass([adapter class]),
-               adapter);
-        return configuration;
-    }
-
-    NSInteger section = [(NSIndexPath *)indexPath section];
-    id sectionController = ((id (*)(id, SEL, NSInteger))objc_msgSend)(adapter, sectionControllerSelector, section);
-    id viewModel = SPKKVCObject(sectionController, @"viewModel");
-    if (!viewModel)
-        viewModel = [SPKUtils getIvarForObj:sectionController name:"_viewModel"];
-    if (!viewModel)
-        viewModel = SPKKVCObject(sectionController, @"item");
-    if (!viewModel)
-        viewModel = [SPKUtils getIvarForObj:sectionController name:"_item"];
-
-    if (!viewModel) {
-        SPKLog(@"Messages", @"[Sparkle MessagesSeen] Inbox menu context skipped: missing viewModel section=%ld sectionController=%@<%p>",
-               (long)section,
-               NSStringFromClass([sectionController class]),
-               sectionController);
-        return configuration;
-    }
-
-    SPKDirectThreadContext *context = SPKDirectThreadContextFromInboxViewModel(viewModel);
-    NSString *toggleTitle = SPKDirectCurrentThreadRuleActionTitle(context);
-    if (toggleTitle.length == 0) {
-        SPKLog(@"Messages", @"[Sparkle MessagesSeen] Inbox menu context skipped: missing thread context viewModel=%@<%p>",
-               NSStringFromClass([viewModel class]),
-               viewModel);
-        return configuration;
-    }
-    UIContextMenuConfiguration *originalConfiguration = (UIContextMenuConfiguration *)configuration;
-    UIContextMenuActionProvider originalProvider = SPKKVCObject(originalConfiguration, @"actionProvider");
-    UIContextMenuContentPreviewProvider originalPreview = SPKKVCObject(originalConfiguration, @"previewProvider");
-    id<NSCopying> originalIdentifier = SPKKVCObject(originalConfiguration, @"identifier");
-
-    UIContextMenuActionProvider wrappedProvider = ^UIMenu *(NSArray<UIMenuElement *> *suggestedActions) {
-        UIMenu *baseMenu = nil;
-        @try {
-            baseMenu = originalProvider ? originalProvider(suggestedActions) : [UIMenu menuWithChildren:suggestedActions];
-        } @catch (NSException *exception) {
-            SPKLog(@"Messages", @"[Sparkle MessagesSeen] Inbox menu original provider failed threadId=%@ exception=%@ reason=%@",
-                   context.threadId ?: @"(unknown)",
-                   exception.name,
-                   exception.reason);
-            return [UIMenu menuWithChildren:suggestedActions ?: @[]];
+// The "start/stop marking seen" row is contributed to the shared inbox long-press menu,
+// which wraps every inbox controller once for all features (see SPKDirectInboxMenu).
+static void SPKInstallDirectInboxSeenContextMenuHook(void) {
+    SPKDirectInboxMenuRegisterProvider(@"seen", 10, ^NSArray<UIMenuElement *> *(SPKDirectThreadContext *context, id viewModel) {
+        NSString *title = SPKDirectCurrentThreadRuleActionTitle(context);
+        if (title.length == 0) {
+            SPKLog(@"Messages", @"[Sparkle MessagesSeen] Inbox menu row skipped: no rule title viewModel=%@<%p>",
+                   NSStringFromClass([viewModel class]),
+                   viewModel);
+            return nil;
         }
-        if (![baseMenu isKindOfClass:[UIMenu class]]) {
-            SPKLog(@"Messages", @"[Sparkle MessagesSeen] Inbox menu original provider returned invalid menu threadId=%@ menu=%@",
-                   context.threadId ?: @"(unknown)",
-                   baseMenu);
-            return [UIMenu menuWithChildren:suggestedActions ?: @[]];
-        }
-        NSString *currentTitle = SPKDirectCurrentThreadRuleActionTitle(context) ?: toggleTitle;
         BOOL applies = SPKDirectManualSeenAppliesToSource(context);
         UIImage *image = [SPKAssetUtils instagramIconNamed:applies ? @"eye_off" : @"eye"];
-        UIAction *toggleAction = [UIAction actionWithTitle:currentTitle
+        UIAction *toggleAction = [UIAction actionWithTitle:title
                                                      image:image
                                                 identifier:nil
                                                    handler:^(__unused UIAction *action) {
                                                        NSString *notificationTitle = nil;
                                                        NSString *notificationSubtitle = nil;
                                                        if (!SPKDirectToggleCurrentThreadRule(context, &notificationTitle, &notificationSubtitle)) {
-                                                           SPKLog(@"Messages", @"[Sparkle MessagesSeen] Inbox menu toggle failed threadId=%@ viewModel=%@<%p>",
-                                                                  context.threadId ?: @"(unknown)",
-                                                                  NSStringFromClass([viewModel class]),
-                                                                  viewModel);
+                                                           SPKLog(@"Messages", @"[Sparkle MessagesSeen] Inbox menu toggle failed threadId=%@", context.threadId ?: @"(unknown)");
                                                            SPKNotify(kSPKNotificationDirectThreadSeenRule, @"Chat not found", nil, @"error_filled", SPKNotificationToneError);
                                                            return;
                                                        }
                                                        SPKNotify(kSPKNotificationDirectThreadSeenRule, notificationTitle, notificationSubtitle, @"circle_check_filled", SPKNotificationToneSuccess);
                                                    }];
-        NSMutableArray *children = [baseMenu.children mutableCopy] ?: [NSMutableArray array];
-        [children addObject:toggleAction];
-        return [baseMenu menuByReplacingChildren:children];
-    };
-
-    return [UIContextMenuConfiguration configurationWithIdentifier:originalIdentifier
-                                                   previewProvider:originalPreview
-                                                    actionProvider:wrappedProvider];
-}
-
-static void SPKInstallDirectInboxSeenContextMenuHook(void) {
-    SEL selector = NSSelectorFromString(@"networkingCoordinator_contextMenuConfigurationForThreadCellAtIndexPath:");
-    for (NSString *className in @[ @"IGDirectInboxViewController", @"IGDirectInboxViewControllerImpl" ]) {
-        Class inboxClass = NSClassFromString(className);
-        if (!inboxClass || !class_getInstanceMethod(inboxClass, selector))
-            continue;
-        MSHookMessageEx(inboxClass, selector, (IMP)SPKDirectInboxContextMenuConfiguration, (IMP *)&SPKDirectOrigInboxContextMenuConfiguration);
-        SPKLog(@"Messages", @"[Sparkle MessagesSeen] Installed inbox seen list context menu hook class=%@", className);
-        return;
-    }
-    SPKLog(@"Messages", @"[Sparkle MessagesSeen] Inbox seen list context menu hook not installed: selector not found");
+        return @[ toggleAction ];
+    });
+    SPKDirectInboxMenuInstallHooksIfNeeded();
 }
 
 static id SPKKVCObject(id target, NSString *key) {

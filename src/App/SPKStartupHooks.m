@@ -61,7 +61,6 @@ FOUNDATION_EXPORT void SPKInstallCommentSortMenuHooksIfEnabled(void);
 FOUNDATION_EXPORT void SPKInstallHideCommentGiftsButtonHooksIfEnabled(void);
 FOUNDATION_EXPORT void SPKInstallCommentComposerGalleryUploadHooksIfEnabled(void);
 FOUNDATION_EXPORT void SPKInstallHideStoryTrayHooksIfEnabled(void);
-FOUNDATION_EXPORT void SPKInstallHideThreadsHooksIfEnabled(void);
 FOUNDATION_EXPORT void SPKInstallHideRepostButtonHooksIfEnabled(void);
 FOUNDATION_EXPORT void SPKInstallDisableHomeButtonRefreshHooksIfEnabled(void);
 FOUNDATION_EXPORT void SPKInstallDisableStorySeenHooksIfNeeded(void);
@@ -149,6 +148,9 @@ void SPKInstallLaunchCriticalHooks(void) {
         return;
     }
     SPKHookBisectSetCurrentSurface(@"Launch");
+    // The presence scheduler is built once, while Instagram creates the user
+    // session; installing later misses it and the refresh interval stays inert.
+    SPK_INSTALL(SPKInstallAccurateActiveStatusHooksIfEnabled);
     // Progressive blur relies on UIScrollEdgeEffect (iOS 26+ only).
     if (SYSTEM_VERSION_GREATER_THAN_OR_EQUAL_TO(@"26.0")) {
         if ([SPKUtils getBoolPref:@"interface_progressive_blur"]) {
@@ -194,7 +196,6 @@ void SPKInstallFeedSurfaceHooksIfNeeded(void) {
     SPK_INSTALL(SPKInstallHideCommentGiftsButtonHooksIfEnabled);
     SPK_INSTALL(SPKInstallCommentComposerGalleryUploadHooksIfEnabled);
     SPK_INSTALL(SPKInstallHideStoryTrayHooksIfEnabled);
-    SPK_INSTALL(SPKInstallHideThreadsHooksIfEnabled);
     SPK_INSTALL(SPKInstallHideRepostButtonHooksIfEnabled);
     SPK_INSTALL(SPKInstallDisableHomeButtonRefreshHooksIfEnabled);
     SPK_INSTALL(SPKInstallCopyDescriptionHooksIfEnabled);
@@ -333,7 +334,6 @@ void SPKInstallGeneralUIHooksIfNeeded(void) {
     SPK_INSTALL(SPKInstallCustomFontHooksIfEnabled);
     SPK_INSTALL(SPKInstallPresenceNotificationsHooksIfEnabled);
     SPK_INSTALL(SPKInstallDirectMessageMenuHooksIfNeeded);
-    SPK_INSTALL(SPKInstallAccurateActiveStatusHooksIfEnabled);
     SPK_INSTALL(SPKInstallStoryAudioToggleHooksIfEnabled);
 }
 

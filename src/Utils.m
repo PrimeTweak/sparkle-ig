@@ -19,6 +19,7 @@
 #import <objc/runtime.h>
 
 NSString *const kSPKPrefPerAccountSettings = @"general_per_account_settings";
+NSNotificationName const SPKHideExploreGridPreferenceDidChangeNotification = @"SPKHideExploreGridPreferenceDidChangeNotification";
 
 // A full screen modal always slides up from the bottom, which reads as "new
 // sheet" rather than "went deeper". This animates it in from the trailing edge
@@ -549,8 +550,12 @@ static id SPKObjectForSelector(id target, NSString *selectorName) {
     return ((id (*)(id, SEL))objc_msgSend)(target, selector);
 }
 
+// Declared here rather than by importing ActionButtonLookupUtils.h, whose other
+// helpers share names with this file's private statics.
+BOOL SPKKVCKeyIsResolvable(id target, NSString *key);
+
 static id SPKKVCObject(id target, NSString *key) {
-    if (!target || !key.length)
+    if (!SPKKVCKeyIsResolvable(target, key))
         return nil;
 
     @try {
@@ -926,23 +931,45 @@ static NSArray<NSString *> *SPKSanitizedInstagramPathSegments(NSArray<NSString *
     return segments;
 }
 
-static NSArray<NSURLQueryItem *> *SPKSanitizedInstagramQueryItems(NSArray<NSURLQueryItem *> *items) {
+// Post, reel, story and profile links carry everything they need in the path, and
+// Instagram keeps minting new tracking parameter names, so those keep an allowlist.
+static BOOL SPKInstagramPathIsShareContent(NSArray<NSString *> *segments) {
+    if (segments.count == 0)
+        return NO;
+    if (segments.count == 1)
+        return YES; // profile
+    static NSSet<NSString *> *contentPrefixes;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        contentPrefixes = [NSSet setWithArray:@[ @"p", @"reel", @"reels", @"tv", @"stories", @"s", @"share" ]];
+    });
+    return [contentPrefixes containsObject:segments[0].lowercaseString] || SPKInstagramPathUsesSharePrefix(segments);
+}
+
+static NSArray<NSURLQueryItem *> *SPKSanitizedInstagramQueryItems(NSArray<NSURLQueryItem *> *items, BOOL shareContent) {
     if (items.count == 0)
         return nil;
 
+    static NSSet<NSString *> *allowedKeys;
     static NSSet<NSString *> *blockedKeys;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
+        allowedKeys = [NSSet setWithArray:@[ @"img_index", @"story_media_id", @"comment_id", @"hl" ]];
         blockedKeys = [NSSet setWithArray:@[
-            @"igsh", @"igshid", @"ig_rid", @"ig_mid",
+            @"igsh", @"igshid", @"igsi", @"ig_rid", @"ig_mid",
             @"utm_source", @"utm_medium", @"utm_campaign", @"utm_term", @"utm_content",
-            @"fbclid"
+            @"fbclid", @"stkn",
+            @"rpxt", @"psln", @"srtk", @"vrfl", @"exln", @"xtok"
         ]];
     });
 
     NSMutableArray<NSURLQueryItem *> *kept = [NSMutableArray array];
     for (NSURLQueryItem *item in items) {
-        if (![blockedKeys containsObject:item.name.lowercaseString]) {
+        NSString *name = item.name.lowercaseString;
+        // Other Instagram pages (sign-in, help, redirects) keep unknown parameters,
+        // which are usually what makes the link work.
+        BOOL keep = shareContent ? [allowedKeys containsObject:name] : ![blockedKeys containsObject:name];
+        if (keep) {
             [kept addObject:item];
         }
     }
@@ -1040,6 +1067,15 @@ static BOOL SPKPrefIsGlobalKey(NSString *key) {
             @"interface_nav_order",
             @"interface_swipe_tabs",
             @"interface_launch_tab",
+            // The bar is assembled during early launch, before the session resolves,
+            // so per-account hidden tabs came and went between launches and switches.
+            @"interface_hide_feed_tab",
+            @"interface_hide_reels_tab",
+            @"interface_hide_msgs_tab",
+            @"interface_hide_explore_tab",
+            @"interface_hide_profile_tab",
+            @"interface_hide_create_tab",
+            @"interface_hide_tab_bar_in_messages_only",
             // The Settings quick-access long-press is attached to tab-bar buttons
             // as they're built during early launch — before the account session
             // resolves — so a per-account effective key resolves against the
@@ -2481,7 +2517,7 @@ static void SPKSetResolvedPKForUsername(NSString *username, NSString *pk) {
     components.scheme = @"https";
     components.host = @"www.instagram.com";
     components.path = path;
-    components.queryItems = SPKSanitizedInstagramQueryItems(components.queryItems);
+    components.queryItems = SPKSanitizedInstagramQueryItems(components.queryItems, SPKInstagramPathIsShareContent(segments));
     components.fragment = nil;
 
     return components.URL ?: url;

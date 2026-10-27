@@ -37,6 +37,33 @@ static BOOL SPKFeedShouldSuppressNativeLongPressFromHandler(id handler, UIGestur
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
     return SPKFeedShouldSuppressNativeLongPress(gestureRecognizer);
 }
+
+// Reels in feed draw their author header inside the expand recognizer's cell, so
+// touches on controls, avatars, headers and smaller long-press owners are left to
+// them; otherwise the 0.3s expand beats story peek and profile photo zoom.
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
+    UIView *host = gestureRecognizer.view;
+    CGFloat hostArea = CGRectGetWidth(host.bounds) * CGRectGetHeight(host.bounds);
+    for (UIView *view = touch.view; view && view != host; view = view.superview) {
+        if ([view isKindOfClass:[UIControl class]])
+            return NO;
+
+        NSString *className = NSStringFromClass([view class]);
+        for (NSString *fragment in @[ @"Avatar", @"ProfilePic", @"StoryRing", @"Header" ]) {
+            if ([className rangeOfString:fragment].location != NSNotFound)
+                return NO;
+        }
+
+        CGFloat area = CGRectGetWidth(view.bounds) * CGRectGetHeight(view.bounds);
+        if (hostArea <= 0 || area >= hostArea * 0.25)
+            continue;
+        for (UIGestureRecognizer *other in view.gestureRecognizers) {
+            if (other.enabled && [other isKindOfClass:[UILongPressGestureRecognizer class]])
+                return NO;
+        }
+    }
+    return YES;
+}
 @end
 
 static BOOL SPKFeedLongPressExpandEnabled(void) {
