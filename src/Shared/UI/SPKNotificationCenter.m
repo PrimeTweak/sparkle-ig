@@ -94,6 +94,7 @@ SPK_NOTIF_CONST(kSPKNotificationSettingsClearCache, "settings_clear_cache");
 SPK_NOTIF_CONST(kSPKNotificationCopyDescription, "copy_description");
 SPK_NOTIF_CONST(kSPKNotificationCopyNoteText, "copy_note_text");
 SPK_NOTIF_CONST(kSPKNotificationShareLongPressCopyLink, "share_long_press_copy_link");
+SPK_NOTIF_CONST(kSPKNotificationShareSheetPin, "share_sheet_pin");
 SPK_NOTIF_CONST(kSPKNotificationCopyComment, "copy_comment");
 SPK_NOTIF_CONST(kSPKNotificationCommentSortUnavailable, "comment_sort_unavailable");
 SPK_NOTIF_CONST(kSPKNotificationCopyGIFLink, "copy_gif_link");
@@ -287,6 +288,7 @@ NSArray<NSDictionary *> *SPKNotificationPreferenceSections(void) {
               SPKNotificationItem(kSPKNotificationCopyDescription, @"Copy Description", @"copy"),
               SPKNotificationItem(kSPKNotificationCopyNoteText, @"Copy Note Text", @"copy"),
               SPKNotificationItem(kSPKNotificationShareLongPressCopyLink, @"Hold Send to Copy Link", @"link"),
+              SPKNotificationItem(kSPKNotificationShareSheetPin, @"Share Sheet Pins", @"pin"),
               SPKNotificationItem(kSPKNotificationFlexUnavailable, @"FLEX Unavailable", @"warning"),
           ]},
     ];

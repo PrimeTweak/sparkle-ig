@@ -47,6 +47,7 @@
 @class IGDirectRealtimeIrisThreadDelta;
 @class IGDirectRealtimeIrisThreadDeltaPayload;
 @class IGDirectRecipientCellViewModel;
+@class IGDirectRecipientListViewController;
 @class IGDirectShareRecipient;
 @class IGDirectThreadThemePickerOption;
 @class IGDirectThreadViewController;
@@ -166,6 +167,7 @@
 @class IGVideoClip;
 @class IGViewController;
 @class IGWindow;
+@class _TtC19IGSundialAutoScroll19IGSundialAutoScroll;
 @class _TtC19IGSundialFeedFooter24IGSundialViewerBottomBar;
 @class _TtC19IGSundialFeedFooter30IGSundialViewerBottomBarConfig;
 @class _TtC19IGSundialFeedFooter37IGSundialViewerBottomBarCommentConfig;
@@ -539,6 +541,12 @@
 @interface IGDirectShareRecipient : NSObject
 - (NSString *)threadName;
 - (BOOL)isBroadcastChannel;
+@end
+
+// The share sheet's recipient grid, fed by its own IGListAdapter.
+@interface IGDirectRecipientListViewController : UIViewController
+@property (readonly, nonatomic) UICollectionView *collectionView;
+@property (readonly, nonatomic) id listAdapter;
 @end
 
 @interface IGDirectRecipientCellViewModel : NSObject
@@ -1195,6 +1203,12 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 
 @interface UIViewController (FBIntentNavigation)
 - (id<FBIntentHandler>)fb_intentHandler;
+@end
+
+// Swift controller behind the reels auto scroll toggle; the user's choice goes
+// through setUserEnabled:.
+@interface _TtC19IGSundialAutoScroll19IGSundialAutoScroll : NSObject
+- (void)setUserEnabled:(BOOL)enabled;
 @end
 
 @interface _TtC19IGSundialFeedFooter24IGSundialViewerBottomBar : UIView
