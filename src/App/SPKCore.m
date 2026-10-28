@@ -71,6 +71,8 @@ static NSDictionary *SPKFeatureDefaults(void) {
         @"msgs_confirm_voice_msg" : @(NO),
         @"general_confirm_create_group" : @(NO),
         @"general_confirm_send" : @(NO),
+        @"general_share_sheet_pins" : @(NO),
+        @"general_share_sheet_pinned" : @[],
         @"general_confirm_open_link" : @(NO),
         @"profile_full_res_photo" : @(NO),
         @"msgs_keep_deleted" : @(NO),
@@ -157,6 +159,7 @@ static NSDictionary *SPKFeatureDefaults(void) {
         @"general_comments_media_actions" : @(YES),
         @"general_comments_hide_shopping" : @(NO),
         @"general_comments_hide_gifts_button" : @(NO),
+        @"general_comments_hide_emoji_bar" : @(NO),
         @"general_comments_gallery_upload" : @(NO),
         @"feed_comments_sort_menu" : @(NO),
         @"feed_comments_sort_mode" : @"default",
@@ -205,6 +208,7 @@ static NSDictionary *SPKFeatureDefaults(void) {
         @"msgs_upload_gallery_media" : @(NO),
         @"feed_disable_home_refresh" : @(NO),
         @"reels_disable_tab_refresh" : @(NO),
+        @"reels_auto_scroll_default" : @"default",
         @"stories_stop_auto_advance" : @(NO),
         @"stories_advance_on_manual_seen" : @(NO),
         @"msgs_seen_on_send" : @(NO),
@@ -217,6 +221,7 @@ static NSDictionary *SPKFeatureDefaults(void) {
         @"reels_confirm_repost" : @(NO),
         @"feed_hide_repost_btn" : @(NO),
         @"reels_hide_repost_btn" : @(NO),
+        @"reels_hide_visual_search_btn" : @(NO),
         @"stories_poll_vote_counts" : @(NO),
         @"gallery_show_favorites_top" : @(NO),
         @"gallery_flat_browsing" : @(NO),
@@ -266,6 +271,26 @@ static void SPKCoreMigrateInstantsCameraButtonPreference(void) {
     [defaults setBool:YES forKey:migratedKey];
 }
 
+// Meta's own-product promotions were hidden by Hide Suggested Threads before getting
+// their own switch; every namespace that had it on starts with the new one on.
+static void SPKCoreMigrateMetaPromotionsPreference(void) {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    static NSString *const migratedKey = @"feed_hide_meta_promotions_migrated";
+    if ([defaults boolForKey:migratedKey])
+        return;
+
+    NSString *legacyKey = @"feed_hide_suggested_threads";
+    NSString *newKey = @"feed_hide_meta_promotions";
+    for (NSString *key in [defaults dictionaryRepresentation].allKeys) {
+        if (![key isEqualToString:legacyKey] && ![key hasSuffix:[@"_" stringByAppendingString:legacyKey]])
+            continue;
+        if ([defaults boolForKey:key])
+            [defaults setBool:YES forKey:[[key substringToIndex:key.length - legacyKey.length] stringByAppendingString:newKey]];
+    }
+
+    [defaults setBool:YES forKey:migratedKey];
+}
+
 void SPKCoreRegisterBootstrapDefaults(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -281,6 +306,7 @@ void SPKCoreRegisterDefaults(void) {
     dispatch_once(&onceToken, ^{
         [[NSUserDefaults standardUserDefaults] registerDefaults:SPKFeatureDefaults()];
         SPKCoreMigrateInstantsCameraButtonPreference();
+        SPKCoreMigrateMetaPromotionsPreference();
         SPKStartupMark(@"feature defaults registered");
     });
 }
