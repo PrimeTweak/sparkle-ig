@@ -59,11 +59,6 @@ FOUNDATION_EXPORT void SPKInstallSwipeCloseCommentsHooksIfEnabled(void);
 FOUNDATION_EXPORT void SPKInstallCommentActionsHooksIfEnabled(void);
 FOUNDATION_EXPORT void SPKInstallCommentSortMenuHooksIfEnabled(void);
 FOUNDATION_EXPORT void SPKInstallHideCommentGiftsButtonHooksIfEnabled(void);
-FOUNDATION_EXPORT void SPKInstallHideCommentEmojiBarHooksIfEnabled(void);
-FOUNDATION_EXPORT void SPKInstallHideMetaAIStoryCameraHooksIfNeeded(void);
-FOUNDATION_EXPORT void SPKInstallReelsAutoScrollDefaultHooksIfEnabled(void);
-FOUNDATION_EXPORT void SPKInstallHideVisualSearchButtonHooksIfEnabled(void);
-FOUNDATION_EXPORT void SPKInstallShareSheetPinsHooksIfNeeded(void);
 FOUNDATION_EXPORT void SPKInstallCommentComposerGalleryUploadHooksIfEnabled(void);
 FOUNDATION_EXPORT void SPKInstallHideStoryTrayHooksIfEnabled(void);
 FOUNDATION_EXPORT void SPKInstallHideRepostButtonHooksIfEnabled(void);
@@ -199,7 +194,6 @@ void SPKInstallFeedSurfaceHooksIfNeeded(void) {
     SPK_INSTALL(SPKInstallCommentActionsHooksIfEnabled);
     SPK_INSTALL(SPKInstallCommentSortMenuHooksIfEnabled);
     SPK_INSTALL(SPKInstallHideCommentGiftsButtonHooksIfEnabled);
-    SPK_INSTALL(SPKInstallHideCommentEmojiBarHooksIfEnabled);
     SPK_INSTALL(SPKInstallCommentComposerGalleryUploadHooksIfEnabled);
     SPK_INSTALL(SPKInstallHideStoryTrayHooksIfEnabled);
     SPK_INSTALL(SPKInstallHideRepostButtonHooksIfEnabled);
@@ -221,7 +215,6 @@ void SPKInstallStorySurfaceHooksIfNeeded(void) {
     SPK_INSTALL(SPKInstallStoryAutoSaveHooksIfEnabled);
     SPK_INSTALL(SPKInstallSeenButtonHooksIfNeeded);
     SPK_INSTALL(SPKInstallHideMetaAIHooksIfEnabled);
-    SPK_INSTALL(SPKInstallHideMetaAIStoryCameraHooksIfNeeded);
     SPK_INSTALL(SPKInstallLikeConfirmHooksIfNeeded);
     SPK_INSTALL(SPKInstallDisableStorySeenHooksIfNeeded);
     SPK_INSTALL(SPKInstallStickerInteractConfirmHooksIfEnabled);
@@ -246,9 +239,7 @@ void SPKInstallReelsSurfaceHooksIfNeeded(void) {
     SPK_INSTALL(SPKInstallReelsPlaybackHooksIfNeeded);
     SPK_INSTALL(SPKInstallHideReelsHeaderHooksIfEnabled);
     SPK_INSTALL(SPKInstallDisableScrollingReelsHooksIfEnabled);
-    SPK_INSTALL(SPKInstallReelsAutoScrollDefaultHooksIfEnabled);
     SPK_INSTALL(SPKInstallHideRepostButtonHooksIfEnabled);
-    SPK_INSTALL(SPKInstallHideVisualSearchButtonHooksIfEnabled);
     SPK_INSTALL(SPKInstallHideMetricsHooksIfEnabled);
 }
 
@@ -322,7 +313,6 @@ void SPKInstallGeneralUIHooksIfNeeded(void) {
     SPK_INSTALL(SPKInstallTweakGeneralUIHooksIfNeeded);
     SPK_INSTALL(SPKInstallSharedLinkCleanupHooksIfEnabled);
     SPK_INSTALL(SPKInstallShareLongPressCopyHooksIfNeeded);
-    SPK_INSTALL(SPKInstallShareSheetPinsHooksIfNeeded);
     SPK_INSTALL(SPKInstallHideMetaAIHooksIfEnabled);
     SPK_INSTALL(SPKInstallNoSuggestedUsersHooksIfEnabled);
     SPK_INSTALL(SPKInstallOpenLinkFromClipboardHooksIfEnabled);

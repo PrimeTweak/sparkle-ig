@@ -39,14 +39,6 @@ static NSString *const kSPKReelsActionButtonEnabledKey = @"reels_action_btn";
                                 defaultsKey:@"reels_hide_repost_btn"
                             requiresRestart:YES],
             ({
-                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Hide visual search button"
-                                                             icon:SPKSettingsIcon(@"visual_search")
-                                                      defaultsKey:@"reels_hide_visual_search_btn"];
-                row.helpText = @"Removes the visual search button from reels.";
-                row.searchKeywords = @"visual search lens image button";
-                row;
-            }),
-            ({
                 SPKSetting *g = SPKToggleMenuRowSetting(@"Hide counts", @"heart", @[
                     [SPKToggleMenuItem itemWithTitle:@"Likes"
                                             iconName:@"poll"
@@ -90,19 +82,7 @@ static NSString *const kSPKReelsActionButtonEnabledKey = @"reels_action_btn";
             }),
             [SPKSetting switchCellWithTitle:@"Disable Reels tab refresh"
                                        icon:SPKSettingsIcon(@"arrow_cw")
-                                defaultsKey:@"reels_disable_tab_refresh"],
-            ({
-                SPKSetting *row = [SPKSetting menuCellWithTitle:@"Auto scroll"
-                                                           icon:SPKSettingsIcon(@"autoscroll")
-                                                           menu:SPKReelsAutoScrollDefaultMenu()];
-                row.helpText = @"Turns Reels auto scroll on or off at each launch; Default keeps Instagram's choice. The switch in Reels still works until the next launch, on accounts where Instagram offers it.";
-                row.searchKeywords = @"auto scroll autoscroll next reel launch";
-                // One reel at a time forces auto scroll off.
-                row.enabledProvider = ^BOOL {
-                    return ![SPKUtils getBoolPref:@"reels_disable_scrolling"];
-                };
-                row;
-            })
+                                defaultsKey:@"reels_disable_tab_refresh"]
         ],
                         @"Tap Controls changes what happens when you tap on a reel. Auto-unmuting controls prevent reels from unmuting when volume or silent mode changes."),
         SPKTopicSection(@"Limits", @[
@@ -112,8 +92,6 @@ static NSString *const kSPKReelsActionButtonEnabledKey = @"reels_action_btn";
                                 defaultsKey:@"reels_disable_scrolling"
                             requiresRestart:YES];
                 row.helpText = @"Stops the next reel from scrolling in by itself when one ends.";
-                // Gates the Auto scroll row.
-                row.reloadsTableOnSwitchChange = YES;
                 row;
             }),
             ({

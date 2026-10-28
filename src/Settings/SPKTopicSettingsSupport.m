@@ -249,20 +249,6 @@ UIMenu *SPKReelsTapControlMenu(void) {
     ]];
 }
 
-UIMenu *SPKReelsAutoScrollDefaultMenu(void) {
-    return [UIMenu menuWithChildren:@[
-        SPKMenuCommand(@"Default", nil, nil, @"reels_auto_scroll_default", @"default", NO),
-        [UIMenu menuWithTitle:@""
-                        image:nil
-                   identifier:nil
-                      options:UIMenuOptionsDisplayInline
-                     children:@[
-                         SPKMenuCommand(@"On", nil, nil, @"reels_auto_scroll_default", @"on", NO),
-                         SPKMenuCommand(@"Off", nil, nil, @"reels_auto_scroll_default", @"off", NO)
-                     ]]
-    ]];
-}
-
 UIMenu *SPKCommentSortModeMenu(void) {
     return [UIMenu menuWithChildren:@[
         SPKMenuCommand(@"Instagram's order", @"sort", nil, @"feed_comments_sort_mode", @"default", NO),

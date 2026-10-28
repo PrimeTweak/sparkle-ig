@@ -61,7 +61,6 @@ SPKSetting *SPKActionButtonRowSetting(NSString *enabledKey, NSString *_Nullable 
 SPKSetting *SPKActionButtonDefaultActionNavigationSetting(SPKActionButtonSource source);
 SPKSetting *SPKActionButtonConfigurationNavigationSetting(SPKActionButtonSource source, NSString *topicTitle, NSArray<NSString *> *supportedActions, NSArray<SPKActionMenuSection *> *defaultSections);
 UIMenu *SPKReelsTapControlMenu(void);
-UIMenu *SPKReelsAutoScrollDefaultMenu(void);
 UIMenu *SPKMainFeedModeMenu(void);
 UIMenu *SPKSeenButtonPositionMenu(void);
 UIMenu *SPKLastActiveFormatMenu(void);

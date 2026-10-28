@@ -145,12 +145,6 @@ static NSString *SPKGeneralHiddenCountAccessory(NSArray<NSDictionary<NSString *,
     holdSendCopyLink.helpText = @"Long-press the send or share button to get the post link.";
     holdSendCopyLink.searchKeywords = @"long press share button post link hold send";
 
-    SPKSetting *pinRecipients = [SPKSetting switchCellWithTitle:@"Pin recipients"
-                                                           icon:SPKSettingsIcon(@"pin")
-                                                    defaultsKey:@"general_share_sheet_pins"];
-    pinRecipients.helpText = @"Long-press a person in the share sheet to pin them at the top, and again to unpin. Long-pressing a group still shows its members, with a button to pin it.";
-    pinRecipients.searchKeywords = @"share sheet pin top favorite recipients send";
-
     // ---- Sharing -------------------------------------------------------
 
 
@@ -194,7 +188,6 @@ static NSString *SPKGeneralHiddenCountAccessory(NSArray<NSDictionary<NSString *,
             copyText,
             stripTracking,
             holdSendCopyLink,
-            pinRecipients,
             showMediaInfo,
             showDateInMenu],
                         nil),

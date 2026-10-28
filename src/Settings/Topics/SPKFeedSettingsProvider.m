@@ -72,12 +72,6 @@ static NSArray *SPKFeedCommentsSections(void) {
     hideGiftsButton.helpText = @"Removes the gift shortcut from the composer.";
     hideGiftsButton.searchKeywords = @"gift composer shortcut";
 
-    SPKSetting *hideEmojiBar = [SPKSetting switchCellWithTitle:@"Hide emoji bar"
-                                                          icon:SPKSettingsIcon(@"reactions")
-                                                   defaultsKey:@"general_comments_hide_emoji_bar"];
-    hideEmojiBar.helpText = @"Removes the row of quick reaction emojis above the comment box.";
-    hideEmojiBar.searchKeywords = @"emoji reactions composer quick";
-
     // Comment settings relocated from General; keys unchanged.
     return @[
     SPKTopicSection(@"Comments", @[
@@ -89,8 +83,7 @@ static NSArray *SPKFeedCommentsSections(void) {
                 swipeCloseComments,
                 swipeDirection,
                 hideCommentShopping,
-                hideGiftsButton,
-                hideEmojiBar
+                hideGiftsButton
             ],
                             nil)
     ];
@@ -163,12 +156,8 @@ static NSArray *SPKFeedCommentsSections(void) {
                     [SPKToggleMenuItem itemWithTitle:@"Suggested Threads"
                                             iconName:@"threads"
                                          defaultsKey:@"feed_hide_suggested_threads"],
-                    [SPKToggleMenuItem itemWithTitle:@"Meta promotions"
-                                            iconName:@"ads"
-                                         defaultsKey:@"feed_hide_meta_promotions"],
                 ]);
-                g.helpText = @"Meta promotions are Meta's ads for its own products, such as Meta Verified offers and suggested Facebook pages.";
-                g.searchKeywords = @"hide stories tray suggested posts reels threads meta promotions verified facebook";
+                g.searchKeywords = @"hide stories tray suggested posts reels threads";
                 g;
             }),
             ({

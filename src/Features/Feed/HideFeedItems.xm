@@ -139,7 +139,7 @@ static NSArray *removeItemsInList(NSArray *list, SPKFeedFilterSurface surface) {
 
             // Feed (carousel)
             if (isFeed) {
-                if ([obj isKindOfClass:SPKThreadsInFeedModelClass()]) {
+                if ([obj isKindOfClass:%c(IGBloksFeedUnitModel)] || [obj isKindOfClass:SPKThreadsInFeedModelClass()]) {
                     SPKLog(@"General", @"[Sparkle] Hiding suggested threads posts (carousel)");
 
                     continue;
@@ -149,17 +149,6 @@ static NSArray *removeItemsInList(NSArray *list, SPKFeedFilterSurface surface) {
             // Reels
             if ([obj isKindOfClass:%c(IGSundialNetegoItem)]) {
                 SPKLog(@"General", @"[Sparkle] Hiding suggested threads posts (reels)");
-
-                continue;
-            }
-        }
-
-        // Remove Meta's promotions for its own products (Meta Verified offers,
-        // suggested Facebook pages). The server builds these from its own-product
-        // ads and lays them out in Bloks, so every unit of this class is one.
-        if (isFeed && [SPKUtils getBoolPref:@"feed_hide_meta_promotions"]) {
-            if ([obj isKindOfClass:%c(IGBloksFeedUnitModel)]) {
-                SPKLog(@"General", @"[Sparkle] Hiding Meta promotion");
 
                 continue;
             }
@@ -516,7 +505,6 @@ static BOOL SPKAnyFeedFilteringPrefEnabled(void) {
              @"general_hide_suggested_users_feed",
              @"general_hide_suggested_users_reels",
              @"feed_hide_suggested_threads",
-             @"feed_hide_meta_promotions",
              @"feed_hide_stories_tray",
              @"feed_hide_entire_feed",
              @"reels_prevent_doom_scroll"
