@@ -1,21 +1,17 @@
 #import "../../Utils.h"
 #import <objc/runtime.h>
 
-// Adds a Sparkle button to the navigation bar of Instagram's own
-// "Settings and activity" screen.
-//
-// The button is a UIBarButtonItem on the controller's navigationItem, installed
-// once when the screen appears. UIKit owns its placement and its glass
-// treatment; nothing here runs per frame.
+// Adds a Sparkle button and a close button to the navigation bar of Instagram's
+// own "Settings and activity" screen, seated once per appearance.
 
 static const void *kSPKSettingsEntryItemAssocKey = &kSPKSettingsEntryItemAssocKey;
 static const void *kSPKSettingsCloseItemAssocKey = &kSPKSettingsCloseItemAssocKey;
+static const void *kSPKSettingsCloseTargetAssocKey = &kSPKSettingsCloseTargetAssocKey;
 
 @interface SPKNativeSettingsEntryTarget : NSObject
 @property (nonatomic, weak) UIViewController *owner;
 + (instancetype)sharedTarget;
 - (void)openSparkleSettings:(id)sender;
-- (void)closeSettings:(id)sender;
 @end
 
 @implementation SPKNativeSettingsEntryTarget
@@ -29,38 +25,43 @@ static const void *kSPKSettingsCloseItemAssocKey = &kSPKSettingsCloseItemAssocKe
     return target;
 }
 
-- (void)closeSettings:(id)sender {
-    // Dismissal reads the hierarchy rather than a remembered controller.
-    //
-    // The owner was held on this shared target, so any later screen matching the
-    // predicate overwrote it and the button stopped closing anything. Whatever
-    // is topmost is asked to go away instead, which needs no memory at all.
-    UIViewController *root = UIApplication.sharedApplication.keyWindow.rootViewController;
-    UIViewController *top = root;
-    while (top.presentedViewController)
-        top = top.presentedViewController;
-
-    if (top != root && top.presentingViewController) {
-        [top.presentingViewController dismissViewControllerAnimated:YES completion:nil];
-        return;
-    }
-    [self.owner dismissViewControllerAnimated:YES completion:nil];
-}
-
+// Presents from the screen the button lives on: Instagram's settings already sit
+// over the window's root, which would refuse a second presentation.
 - (void)openSparkleSettings:(id)sender {
-    // Present from the screen this button lives on. Going through the key
-    // window presented from its root — but Instagram's settings sit over that
-    // root, and a controller already presenting refuses to present again, which
-    // is why the tap did nothing at all.
     [SPKUtils showSettingsFromController:self.owner];
 }
 
 @end
 
-// Matched on either signal so a rename on one side still lands: the Swift class
-// name, or the title Instagram gives the screen. The controller is a Swift
-// generic, so its mangled name varies by specialisation and is matched by
-// substring rather than hooked directly.
+// One per screen, so a later settings screen never takes over another's button.
+@interface SPKNativeSettingsCloseTarget : NSObject
+@property (nonatomic, weak) UIViewController *controller;
+- (void)close:(id)sender;
+@end
+
+@implementation SPKNativeSettingsCloseTarget
+
+// The profile menu pushes the screen and the instagram://settings route presents
+// it, so the button goes back in the first case and dismisses in the second.
+- (void)close:(id)sender {
+    UIViewController *controller = self.controller;
+    UINavigationController *navigation = controller.navigationController;
+    UIViewController *stacked = controller;
+    while (stacked.parentViewController && stacked.parentViewController != navigation)
+        stacked = stacked.parentViewController;
+
+    NSUInteger index = navigation ? [navigation.viewControllers indexOfObject:stacked] : NSNotFound;
+    if (index != NSNotFound && index > 0) {
+        [navigation popToViewController:navigation.viewControllers[index - 1] animated:YES];
+        return;
+    }
+    [controller dismissViewControllerAnimated:YES completion:nil];
+}
+
+@end
+
+// The controller is a Swift generic whose mangled name varies, so it is matched
+// by class-name substring or by the title Instagram gives the screen.
 static BOOL SPKIsNativeSettingsController(UIViewController *controller) {
     if (!controller)
         return NO;
@@ -70,18 +71,9 @@ static BOOL SPKIsNativeSettingsController(UIViewController *controller) {
     return [controller.title isEqualToString:@"Settings and activity"];
 }
 
-// Puts the bar in the shape the screen has when Instagram opens it itself.
-//
-// Instagram's own button here is backed by a custom view: setting its title,
-// image or tint changed nothing on screen while the sides it was moved to did
-// change, which leaves no other explanation. So it is replaced rather than
-// restyled — a plain item, drawn black, that dismisses the screen.
-//
-// "Done" is not Instagram's wording either; it appears because this screen was
-// routed to as a modal instead of being pushed from a profile. A close mark
-// says what the control does without borrowing a label from nowhere, and a
-// close control belongs on the leading edge, so the Sparkle entry takes the
-// trailing one.
+// Instagram's own left button is backed by a custom view that ignores title, image
+// and tint, so it is replaced by a black close mark; the Sparkle entry takes the
+// trailing side.
 static void SPKArrangeSettingsBar(UIViewController *controller, UIBarButtonItem *entry) {
     UIColor *ink = [SPKUtils SPKColor_InstagramPrimaryText];
     controller.navigationController.navigationBar.tintColor = ink;
@@ -89,14 +81,18 @@ static void SPKArrangeSettingsBar(UIViewController *controller, UIBarButtonItem 
 
     UIBarButtonItem *close = objc_getAssociatedObject(controller, kSPKSettingsCloseItemAssocKey);
     if (!close) {
+        SPKNativeSettingsCloseTarget *target = [SPKNativeSettingsCloseTarget new];
+        target.controller = controller;
+        objc_setAssociatedObject(controller, kSPKSettingsCloseTargetAssocKey, target, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
         UIImage *mark =
             [UIImage systemImageNamed:@"xmark"
                     withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:16.0
                                                                                       weight:UIImageSymbolWeightSemibold]];
         close = [[UIBarButtonItem alloc] initWithImage:mark
                                                  style:UIBarButtonItemStylePlain
-                                                target:[SPKNativeSettingsEntryTarget sharedTarget]
-                                                action:@selector(closeSettings:)];
+                                                target:target
+                                                action:@selector(close:)];
         close.accessibilityLabel = @"Close";
         objc_setAssociatedObject(controller, kSPKSettingsCloseItemAssocKey, close, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
@@ -106,15 +102,13 @@ static void SPKArrangeSettingsBar(UIViewController *controller, UIBarButtonItem 
     controller.navigationItem.rightBarButtonItems = @[ entry ];
 }
 
+// Arranged on every appearance: Instagram restyles this bar and would otherwise
+// bring its blue button back when the screen is revisited.
 static void SPKSeatSettingsEntryItem(UIViewController *controller) {
     if (!SPKIsNativeSettingsController(controller))
         return;
 
-    // The entry is built once and kept. The arranging runs on every appearance,
-    // because Instagram restyles this bar and would otherwise take its blue Done
-    // back the moment the screen is revisited.
     UIBarButtonItem *entry = objc_getAssociatedObject(controller, kSPKSettingsEntryItemAssocKey);
-
     if (!entry) {
         UIImage *icon =
             [UIImage systemImageNamed:@"sparkles"
@@ -136,15 +130,13 @@ static void SPKSeatSettingsEntryItem(UIViewController *controller) {
 
 %hook UIViewController
 
-// Arranged before the first paint, not after it. Seating the bar only once the
-// screen had appeared let Instagram's blue button show for a frame.
+// Before the first paint, so Instagram's blue button never shows for a frame.
 - (void)viewWillAppear:(BOOL)animated {
     %orig;
     SPKSeatSettingsEntryItem(self);
 }
 
-// Kept as well: the bar is restyled after appearance on some transitions, and
-// the arranging is cheap enough to run twice.
+// Again after appearance: some transitions restyle the bar once the screen is up.
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
     SPKSeatSettingsEntryItem(self);
