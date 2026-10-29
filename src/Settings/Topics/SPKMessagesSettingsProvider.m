@@ -4,7 +4,12 @@
 #import "../../Features/Messages/DeletedMessagesLog/SPKDeletedMessagesViewController.h"
 #import "../../Shared/Account/SPKAccountManager.h"
 #import "../../Shared/ActionButton/SPKActionButtonConfiguration.h"
+#import "../../Shared/Gallery/SPKGalleryLockViewController.h"
+#import "../../Shared/Location/SPKFakeLocationSettingsViewController.h"
+#import "../../Shared/Messages/SPKDirectHiddenChats.h"
+#import "../../Shared/Messages/SPKDirectHiddenChatsLockManager.h"
 #import "../../Shared/Messages/SPKDirectSeenContext.h"
+#import "../../Shared/UI/SPKDialog.h"
 #import "../../Utils.h"
 #import "../SPKSettingsViewController.h"
 #import "../SPKToggleMenu.h"
@@ -16,6 +21,160 @@ static NSString *const kSPKMessagesAudioCallConfirmKey = @"msgs_confirm_audio_ca
 static NSString *const kSPKMessagesVideoCallConfirmKey = @"msgs_confirm_video_call";
 
 static NSArray *SPKMessagesSettingsSections(void);
+static NSArray *SPKHiddenChatsSettingsSections(void);
+
+// The passcode lives in the keychain, so this lock covers the device rather than
+// one account.
+static NSArray<SPKSetting *> *SPKHiddenChatsLockRows(void) {
+    SPKSetting *lockSwitch = [SPKSetting switchCellWithTitle:@"Require authentication"
+                                                        icon:SPKSettingsIcon(@"lock")
+                                                 defaultsKey:@""];
+    lockSwitch.helpText = @"Face ID, Touch ID or a passcode before hidden chats are revealed. The passcode is separate from the gallery and settings ones.";
+    lockSwitch.switchValueProvider = ^BOOL {
+        return [SPKDirectHiddenChatsLockManager sharedManager].isLockEnabled;
+    };
+    lockSwitch.switchChangeHandler = ^(BOOL enabled) {
+        SPKDirectHiddenChatsLockManager *manager = [SPKDirectHiddenChatsLockManager sharedManager];
+        UIViewController *presenter = SPKSettingsTopPresenter();
+        if (enabled && !manager.isLockEnabled) {
+            [SPKGalleryLockViewController presentMode:SPKGalleryLockModeSetPasscode
+                                           forManager:manager
+                                   fromViewController:presenter
+                                           completion:^(__unused BOOL success) {
+                                               SPKSettingsReloadPresenter(presenter);
+                                           }];
+            return;
+        }
+        if (!enabled && manager.isLockEnabled) {
+            [SPKDialog presentFromController:presenter
+                                       title:@"Turn off the hidden chats passcode"
+                                     message:@"Revealing hidden chats will no longer ask for authentication."
+                                     actions:@[
+                                         [SPKDialogAction actionWithTitle:@"Cancel"
+                                                                    style:SPKDialogActionStyleCancel
+                                                                  handler:^{
+                                                                      SPKSettingsReloadPresenter(presenter);
+                                                                  }],
+                                         [SPKDialogAction actionWithTitle:@"Disable"
+                                                                    style:SPKDialogActionStyleDestructive
+                                                                  handler:^{
+                                                                      [manager removePasscode];
+                                                                      SPKSettingsReloadPresenter(presenter);
+                                                                  }],
+                                     ]];
+        }
+    };
+
+    SPKSetting *changePasscode = [SPKSetting buttonCellWithTitle:@"Change passcode"
+                                                        subtitle:nil
+                                                            icon:SPKSettingsIcon(@"key")
+                                                          action:^{
+                                                              [SPKGalleryLockViewController presentMode:SPKGalleryLockModeChangePasscode
+                                                                                             forManager:[SPKDirectHiddenChatsLockManager sharedManager]
+                                                                                     fromViewController:SPKSettingsTopPresenter()
+                                                                                             completion:^(__unused BOOL success){
+                                                                                             }];
+                                                          }];
+    changePasscode.helpText = @"Replaces the passcode after checking the current one.";
+    changePasscode.hiddenProvider = ^BOOL {
+        return ![SPKDirectHiddenChatsLockManager sharedManager].isLockEnabled;
+    };
+
+    return @[ lockSwitch, changePasscode ];
+}
+
+// Rebuilt on the master switch so the sections it gates come and go with their
+// headers, and on every appearance so the list count stays current.
+@interface SPKHiddenChatsSettingsViewController : SPKSettingsViewController
+@end
+
+@implementation SPKHiddenChatsSettingsViewController
+- (instancetype)init {
+    return [super initWithTitle:@"Hidden chats" sections:SPKHiddenChatsSettingsSections() reduceMargin:NO];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self replaceSections:SPKHiddenChatsSettingsSections()];
+}
+
+- (void)switchChanged:(UISwitch *)sender {
+    SPKSetting *row = [self settingForSender:sender];
+    [super switchChanged:sender];
+    if ([row.defaultsKey isEqualToString:@"msgs_hidden_chats"])
+        [self replaceSections:SPKHiddenChatsSettingsSections()];
+}
+@end
+
+static NSArray *SPKHiddenChatsSettingsSections(void) {
+    SPKSetting *hideChats = [SPKSetting switchCellWithTitle:@"Hide chats"
+                                                       icon:SPKSettingsIcon(@"messages_off")
+                                                defaultsKey:@"msgs_hidden_chats"];
+    hideChats.helpText = @"Long-press a chat in the inbox to hide it, and long-press the inbox title to bring hidden chats back.";
+    hideChats.searchKeywords = @"hidden chats conceal private inbox";
+    if (![SPKUtils getBoolPref:@"msgs_hidden_chats"])
+        return @[ SPKTopicSection(@"", @[ hideChats ], nil) ];
+
+    SPKSetting *revealReset = SPKSettingApplySelectedMenuIcon([SPKSetting menuCellWithTitle:@"Hide again"
+                                                                                       icon:SPKSettingsIcon(@"clock")
+                                                                                       menu:SPKHiddenChatsRevealResetMenu()],
+                                                              SPKSettingsIcon(@"clock"));
+    revealReset.helpText = @"When revealed chats go back into hiding: on leaving the inbox, on leaving the app, or only when you long-press the title again.";
+
+    SPKSetting *muteNotifications = [SPKSetting switchCellWithTitle:@"Mute notifications"
+                                                               icon:SPKSettingsIcon(@"notification_off")
+                                                        defaultsKey:@"msgs_hidden_chats_mute_notifications"];
+    muteNotifications.helpText = @"Mutes hidden chats on Instagram, messages and calls, so nothing arrives for them. Unhiding lifts the mute unless the chat was already muted.";
+    // Runs after the preference is written, so chats hidden earlier end up in the
+    // same state as ones hidden afterwards.
+    muteNotifications.action = ^{
+        SPKDirectHiddenChatsSyncNativeMute([SPKUtils getBoolPref:@"msgs_hidden_chats_mute_notifications"]);
+    };
+
+    SPKSetting *excludeBadge = [SPKSetting switchCellWithTitle:@"Exclude from badge"
+                                                          icon:SPKSettingsSystemIcon(@"app.badge", SPKSettingsCellIconPointSize, UIImageSymbolWeightSemibold)
+                                                   defaultsKey:@"msgs_hidden_chats_exclude_badge"];
+    excludeBadge.helpText = @"Unread messages in hidden chats stay out of the messages badge.";
+
+    SPKSetting *shareSheet = [SPKSetting switchCellWithTitle:@"Hide from share sheet"
+                                                        icon:SPKSettingsIcon(@"messages")
+                                                 defaultsKey:@"msgs_hidden_chats_hide_in_share_sheet"];
+    shareSheet.helpText = @"Keeps hidden chats out of suggested recipients when sharing or starting a message. Search still finds them, and holding the group button shows them for that sheet.";
+
+    SPKSetting *list = [SPKSetting navigationCellWithTitle:@"Hidden chats"
+                                                  subtitle:nil
+                                                      icon:SPKSettingsIcon(@"users")
+                                            viewController:SPKDirectHiddenChatsListViewController()];
+    // The count stays withheld while the lock is armed: it is part of what the lock protects.
+    list.userInfo = @{
+        @"accessoryText" : [[SPKDirectHiddenChatsLockManager sharedManager] requiresAuthentication]
+            ? @""
+            : [NSString stringWithFormat:@"%lu", (unsigned long)SPKDirectHiddenChatCount()]
+    };
+    list.helpText = @"Every hidden chat. Add one by username, or swipe a row to unhide it.";
+    list.navigationGate = ^(void (^allow)(void)) {
+        SPKDirectHiddenChatsAuthenticate(SPKSettingsTopPresenter(), ^(BOOL granted) {
+            if (granted)
+                allow();
+        });
+    };
+
+    return @[
+        SPKTopicSection(@"", @[ hideChats ], nil),
+        SPKTopicSection(@"Behavior", @[ revealReset, muteNotifications, excludeBadge, shareSheet ], nil),
+        SPKTopicSection(@"", @[ list ], nil),
+        SPKTopicSection(@"Lock", SPKHiddenChatsLockRows(), nil),
+    ];
+}
+
+// Off, or how many chats are hidden; just On while the lock withholds the count.
+static NSString *SPKHiddenChatsSettingsSummary(void) {
+    if (![SPKUtils getBoolPref:@"msgs_hidden_chats"])
+        return @"Off";
+    if ([[SPKDirectHiddenChatsLockManager sharedManager] requiresAuthentication])
+        return @"On";
+    return [NSString stringWithFormat:@"%lu hidden", (unsigned long)SPKDirectHiddenChatCount()];
+}
 
 // A switch cell that stays visible but is disabled while the "Audio Downloads"
 // master toggle is off (keeping its stored value).
@@ -62,6 +221,17 @@ manualSeenList.hiddenProvider = ^BOOL {
     return ![SPKUtils getBoolPref:@"msgs_manual_seen"];
 };
     manualSeenList.helpText = @"Excluded chats keep Instagram's normal read receipts; in Included mode only the listed chats are held. Also manageable from the eye button or a long-press in the inbox.";
+
+    SPKSetting *hiddenChatsEntry = [SPKSetting navigationCellWithTitle:@"Hidden chats"
+                                                              subtitle:nil
+                                                                  icon:SPKSettingsIcon(@"messages_off")
+                                                        viewController:[[SPKHiddenChatsSettingsViewController alloc] init]];
+    hiddenChatsEntry.userInfo = @{@"accessoryText" : SPKHiddenChatsSettingsSummary()};
+    hiddenChatsEntry.helpText = @"Takes chats out of the inbox until you long-press its title. They can also be muted and kept out of the badge and share sheet.";
+    hiddenChatsEntry.searchKeywords = @"hide chats hidden inbox private lock";
+    hiddenChatsEntry.searchSectionsProvider = ^NSArray * {
+        return SPKHiddenChatsSettingsSections();
+    };
 
     // ---- Action Button -------------------------------------------------
 
@@ -233,6 +403,17 @@ trimAudio.helpText = @"Adds a Trim & Send option so you can cut the file before 
                                                    defaultsKey:@"msgs_copy_note_text"];
     copyNoteText.helpText = @"Long-press a note in the tray — the option appears when the note has text.";
 
+    SPKSetting *fakeLocation = [SPKSetting navigationCellWithTitle:@"Fake location"
+                                                          subtitle:nil
+                                                              icon:SPKSettingsIcon(@"location")
+                                                    viewController:[[SPKFakeLocationSettingsViewController alloc] init]];
+    fakeLocation.userInfo = @{@"accessoryText" : SPKFakeLocationSettingsSummary()};
+    fakeLocation.helpText = @"Friends see a place you choose on the friends map instead of where you are. Instagram's other location features use it too.";
+    fakeLocation.searchKeywords = @"spoof gps position place map";
+    fakeLocation.searchSectionsProvider = ^NSArray * {
+        return SPKFakeLocationSettingsSections();
+    };
+
     return @[
         // Everything about the chat screen itself. Was split across "Messaging"
         // and a section literally called "Interface".
@@ -310,6 +491,7 @@ trimAudio.helpText = @"Adds a Trim & Send option so you can cut the file before 
             advanceVisual,
         ],
                         nil),
+        SPKTopicSection(@"", @[ hiddenChatsEntry ], nil),
         SPKTopicSection(@"Chat screen", @[
             ({
                 // Lives with the inbox it changes. Kept tied to Disable Instants
@@ -354,18 +536,16 @@ trimAudio.helpText = @"Adds a Trim & Send option so you can cut the file before 
             }),
             lastActiveFormat],
                         nil),
-// Visual Messages ∪ Vanish Mode: same territory (messages that
-        // disappear) — and it resolves the duplicated "Disable Screenshot
-        // Detection" row: one gate, two context-named items.
-SPKTopicSection(@"Notes", @[
+        SPKTopicSection(@"Notes & location", @[
             [SPKSetting switchCellWithTitle:@"Hide Notes tray"
                                        icon:SPKSettingsIcon(@"notes")
                                 defaultsKey:@"msgs_hide_notes_tray"],
+            downloadNotesAudio,
+            copyNoteText,
             [SPKSetting switchCellWithTitle:@"Hide friends map"
                                        icon:SPKSettingsIcon(@"map")
                                 defaultsKey:@"msgs_hide_friends_map"],
-            downloadNotesAudio,
-            copyNoteText,
+            fakeLocation,
         ],
                         nil),
         SPKTopicSection(@"Audio & media", @[

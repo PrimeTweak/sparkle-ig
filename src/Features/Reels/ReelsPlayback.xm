@@ -1,4 +1,32 @@
 #import "../../Utils.h"
+#import <objc/message.h>
+
+// Instagram keeps one sticky sound state for the app: 0 unset, 1 muted, 2 unmuted.
+// While it is unset, reels pick sound on or off by themselves, so starting muted
+// writes 1 whenever it is unset; a tap on a reel still writes 2 as usual.
+static const long long kSPKStickySoundStateUnset = 0;
+static const long long kSPKStickySoundStateMuted = 1;
+static const long long kSPKStickySoundStateReason = 5; // what Instagram's own mute toggle passes
+
+// The first activation after launch restores the previous session's state, so that
+// one is overridden even when set; later ones only fill an unset state.
+static BOOL sSPKReelsDidOverrideLaunchSoundState = NO;
+
+static void SPKReelsApplyStartMuted(id announcer) {
+    if (![SPKUtils getBoolPref:@"reels_disable_auto_unmute"])
+        return;
+    SEL getter = @selector(stickySoundState);
+    SEL setter = @selector(setStickySoundState:forReason:);
+    if (![announcer respondsToSelector:getter] || ![announcer respondsToSelector:setter])
+        return;
+
+    long long state = ((long long (*)(id, SEL))objc_msgSend)(announcer, getter);
+    BOOL launch = !sSPKReelsDidOverrideLaunchSoundState;
+    sSPKReelsDidOverrideLaunchSoundState = YES;
+    if (state == kSPKStickySoundStateMuted || (!launch && state != kSPKStickySoundStateUnset))
+        return;
+    ((void (*)(id, SEL, long long, long long))objc_msgSend)(announcer, setter, kSPKStickySoundStateMuted, kSPKStickySoundStateReason);
+}
 
 %group SPKReelsPlaybackHooks
 
@@ -79,22 +107,13 @@
 }
 %end
 
-// * Disable volume/mute button triggering unmutes
+// Volume presses, the ringer switch and unplugging headphones write the sticky
+// state themselves and are left alone, so starting muted never locks sound off.
 %hook IGAudioStatusAnnouncer
-- (void)_muteSwitchStateChanged:(id)changed {
-    if (![SPKUtils getBoolPref:@"reels_disable_auto_unmute"]) {
-        %orig(changed);
-    }
-}
-- (void)_didPressVolumeButton:(id)button {
-    if (![SPKUtils getBoolPref:@"reels_disable_auto_unmute"]) {
-        %orig(button);
-    }
-}
-- (void)_didUnplugHeadphones:(id)headphones {
-    if (![SPKUtils getBoolPref:@"reels_disable_auto_unmute"]) {
-        %orig(headphones);
-    }
+// Where Instagram restores the last session's sound state or resets it.
+- (void)_applicationDidBecomeActive {
+    %orig;
+    SPKReelsApplyStartMuted(self);
 }
 %end
 
@@ -112,5 +131,13 @@ extern "C" void SPKInstallReelsPlaybackHooksIfNeeded(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         %init(SPKReelsPlaybackHooks);
+
+        // Surface hooks install after launch, usually past the first activation.
+        if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive)
+            return;
+        Class announcerClass = NSClassFromString(@"IGAudioStatusAnnouncer");
+        SEL shared = NSSelectorFromString(@"sharedInstance");
+        if ([announcerClass respondsToSelector:shared])
+            SPKReelsApplyStartMuted(((id (*)(id, SEL))objc_msgSend)(announcerClass, shared));
     });
 }

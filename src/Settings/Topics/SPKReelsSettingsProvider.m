@@ -1,6 +1,7 @@
 #import "SPKReelsSettingsProvider.h"
 
 #import "../../Features/Reels/HideReelsHeader.h"
+#import "../../Features/Reels/ReelsAutoScrollDefault.h"
 #import "../../Shared/ActionButton/SPKActionButtonConfiguration.h"
 #import "../../Utils.h"
 #import "../SPKToggleMenu.h"
@@ -47,6 +48,14 @@ static NSString *const kSPKReelsActionButtonEnabledKey = @"reels_action_btn";
                 row;
             }),
             ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Show repost date"
+                                                             icon:SPKSettingsIcon(@"calendar")
+                                                      defaultsKey:@"reels_show_repost_date"];
+                row.helpText = @"Shows when the reel was reposted, under the name in the sheet opened from the repost bubble.";
+                row.searchKeywords = @"repost date time reposted when";
+                row;
+            }),
+            ({
                 SPKSetting *g = SPKToggleMenuRowSetting(@"Hide counts", @"heart", @[
                     [SPKToggleMenuItem itemWithTitle:@"Likes"
                                             iconName:@"poll"
@@ -81,11 +90,33 @@ static NSString *const kSPKReelsActionButtonEnabledKey = @"reels_action_btn";
                                        icon:SPKSettingsIcon(@"slider")
                                 defaultsKey:@"reels_show_scrubber"],
             ({
-                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Keep Reels muted"
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Playback controls"
+                                                             icon:SPKSettingsIcon(@"playback")
+                                                      defaultsKey:@"reels_playback_controls"];
+                row.helpText = @"Long press a reel's more button for speed, seeking and pause controls. Turning this on reveals Keep speed for.";
+                row.searchKeywords = @"speed seek pause playback rate faster slower";
+                // R5: reveals Keep speed for in place.
+                row.reloadsTableOnSwitchChange = YES;
+                row;
+            }),
+            ({
+                SPKSetting *row = [SPKSetting menuCellWithTitle:@"Keep speed for"
+                                                           icon:SPKSettingsIcon(@"clock")
+                                                           menu:SPKPlaybackSpeedScopeMenu(@"reels_playback_speed_scope")];
+                row.defaultsKey = @"reels_playback_speed_scope";
+                row.helpText = @"Whether a picked speed applies to that reel, until you leave Reels, or to every reel. The playback panel can change it too.";
+                row.hiddenProvider = ^BOOL {
+                    return ![SPKUtils getBoolPref:@"reels_playback_controls"];
+                };
+                row;
+            }),
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Start Reels muted"
                                        icon:SPKSettingsIcon(@"volume_off")
                                 defaultsKey:@"reels_disable_auto_unmute"
                             requiresRestart:YES];
-                row.helpText = @"Reels stay muted even after you press a volume button.";
+                row.helpText = @"Reels start without sound until you unmute them. Applies to every account.";
+                row.searchKeywords = @"keep muted sound volume mute";
                 row;
             }),
             [SPKSetting switchCellWithTitle:@"Disable Reels tab refresh"
@@ -107,12 +138,24 @@ static NSString *const kSPKReelsActionButtonEnabledKey = @"reels_action_btn";
                         @"Tap Controls changes what happens when you tap on a reel. Auto-unmuting controls prevent reels from unmuting when volume or silent mode changes."),
         SPKTopicSection(@"Limits", @[
             ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Disable looping"
+                                                             icon:SPKSettingsIcon(@"loop")
+                                                      defaultsKey:@"reels_stop_looping"];
+                row.helpText = @"Reels stop on their last frame instead of looping; tap play to watch again. Paused while Auto scroll is On.";
+                row.searchKeywords = @"stop looping loop replay repeat end";
+                // Auto scroll in force overrides it.
+                row.enabledProvider = ^BOOL {
+                    return ![SPKReelsAutoScrollEffectiveMode() isEqualToString:@"on"];
+                };
+                row;
+            }),
+            ({
                 SPKSetting *row = [SPKSetting switchCellWithTitle:@"One reel at a time"
                                        icon:SPKSettingsIcon(@"autoscroll")
                                 defaultsKey:@"reels_disable_scrolling"
                             requiresRestart:YES];
                 row.helpText = @"Stops the next reel from scrolling in by itself when one ends.";
-                // Gates the Auto scroll row.
+                // Gates the Auto scroll and Disable looping rows.
                 row.reloadsTableOnSwitchChange = YES;
                 row;
             }),

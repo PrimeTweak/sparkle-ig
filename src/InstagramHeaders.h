@@ -2,6 +2,7 @@
 #import <UIKit/UIKit.h>
 #import <CoreMedia/CoreMedia.h>
 #import <AVFoundation/AVFoundation.h>
+#import <CoreLocation/CoreLocation.h>
 
 // Forward declarations for every class this header defines, so a property can
 // name a type that is only laid out further down.
@@ -10,6 +11,7 @@
 @class FLEXManager;
 @class IGAccountSwitcher;
 @class IGActionableConfirmationToastPresenter;
+@class IGActionableConfirmationToastView;
 @class IGActionableConfirmationToastViewModel;
 @class IGAnimatablePlaceholderTextField;
 @class IGAnimatablePlaceholderTextFieldContainer;
@@ -17,6 +19,11 @@
 @class IGAudioStatusAnnouncer;
 @class IGBadgedNavigationButton;
 @class IGBaseMedia;
+@class IGBrowserController;
+@class IGBrowserNavigationController;
+@class IGBrowserSession;
+@class IGCommentCell;
+@class IGCommentRichCaptionView;
 @class IGCommentThreadConfiguration;
 @class IGCommentThreadViewController;
 @class IGCoreTextView;
@@ -24,6 +31,7 @@
 @class IGCreationActionBarLabeledButton;
 @class IGDSMenuItem;
 @class IGDSSegmentedPillBarView;
+@class IGDate;
 @class IGDirectAggregatedMediaViewerViewController;
 @class IGDirectCommandSystemResult;
 @class IGDirectCommandSystemRow;
@@ -31,6 +39,7 @@
 @class IGDirectComposer;
 @class IGDirectComposerConfig;
 @class IGDirectGatingService;
+@class IGDirectInboxCameraMediaCoordinator;
 @class IGDirectInboxConfig;
 @class IGDirectInboxFeatureManager;
 @class IGDirectInboxHeaderCellViewModel;
@@ -38,6 +47,8 @@
 @class IGDirectInboxSearchAIAgentsPillsContainerCell;
 @class IGDirectInboxSearchAIAgentsSuggestedPromptRowCell;
 @class IGDirectInboxSuggestedThreadCellViewModel;
+@class IGDirectInboxSwiftViewController;
+@class IGDirectInboxViewController;
 @class IGDirectLeftAlignedTitleView;
 @class IGDirectMediaPickerConfig;
 @class IGDirectMediaPickerGalleryConfig;
@@ -62,15 +73,18 @@
 @class IGExploreGridViewController;
 @class IGExploreViewController;
 @class IGFeedItem;
+@class IGFeedItemHeaderCoreTextView;
 @class IGFeedItemMediaCell;
 @class IGFeedItemPagePhotoCell;
 @class IGFeedItemPhotoCell;
 @class IGFeedItemPhotoCellConfiguration;
+@class IGFeedItemTextCell;
 @class IGFeedItemUFICell;
 @class IGFeedItemVideoView;
 @class IGFeedPhotoView;
 @class IGFollowButtonViewConfiguration;
 @class IGFollowController;
+@class IGFriendsMapSecondaryButtonsStackView;
 @class IGGalleryAssetProvider;
 @class IGGalleryDataSource;
 @class IGGalleryImageStickerView;
@@ -89,6 +103,7 @@
 @class IGLabelSupplementaryView;
 @class IGLazyView;
 @class IGLiquidGlassInteractiveTabBar;
+@class IGLocationManager;
 @class IGMainAppScrollingContainerViewController;
 @class IGMainAppSurfaceIntent;
 @class IGMainFeedAppHeaderController;
@@ -105,7 +120,10 @@
 @class IGProfilePicturePreviewViewController;
 @class IGProfileSheetTableViewCell;
 @class IGProfileViewController;
+@class IGQuickSnapExperimentationHelper;
+@class IGQuickSnapPresentationManager;
 @class IGRefreshControl;
+@class IGRepostModel;
 @class IGRootViewController;
 @class IGSaveHomeIntentTarget;
 @class IGSearchBar;
@@ -125,9 +143,12 @@
 @class IGStoryFullscreenSectionController;
 @class IGStoryGalleryConfiguration;
 @class IGStoryMediaCompositionEditingViewController;
+@class IGStoryMediaSeenStateStore;
 @class IGStoryModernVideoView;
 @class IGStoryPhotoView;
+@class IGStoryPogSeenStateStore;
 @class IGStoryPostCaptureEditingViewController;
+@class IGStorySeenStateStore;
 @class IGStoryStickerTrayViewController;
 @class IGStoryTextEntryControlsOverlayView;
 @class IGStoryTextEntryViewController;
@@ -155,10 +176,12 @@
 @class IGTableViewCell;
 @class IGTallNavigationBarView;
 @class IGTapButton;
+@class IGThreadedLocationManager;
 @class IGUFIButtonBarView;
 @class IGUFIButtonWithCountsView;
 @class IGUFIInteractionCountsView;
 @class IGURLHandler;
+@class IGUnifiedVideoCaptionView;
 @class IGUnifiedVideoCollectionView;
 @class IGUser;
 @class IGUserReference;
@@ -190,6 +213,12 @@
     NSString *_text_annotatedTitleText;
     NSString *_text_annotatedSubtitleText;
 }
+@end
+
+// Drawn by Sparkle itself, in its own notification window, for the Instagram
+// notification style. The model is filled through KVC (see SPKNotificationPillView).
+@interface IGActionableConfirmationToastView : UIView
+- (void)configureWithViewModel:(id)model;
 @end
 
 @interface IGActionableConfirmationToastPresenter : NSObject
@@ -406,6 +435,8 @@
 @end
 
 @interface IGStatefulVideoPlayer : NSObject
+- (void)playWithReason:(long long)reason callsiteContext:(id)context;
+- (void)seekToTime:(double)time preciseTime:(BOOL)preciseTime;
 @end
 
 @interface IGStoryPhotoView : UIView
@@ -477,6 +508,8 @@
 @end
 
 @interface IGCoreTextView : UIView
+@property (nonatomic, copy) IGStyledString *styledString;
+@property (nonatomic, weak) id linkHandler;
 @property (nonatomic, strong) NSString *text;
 - (void)addHandleLongPress;                                     // new
 - (void)handleLongPress:(UILongPressGestureRecognizer *)sender; // new
@@ -498,6 +531,8 @@
 @interface IGStyledString : NSObject
 @property (retain, nonatomic) NSMutableAttributedString *attributedString;
 - (void)appendString:(id)arg1;
+- (void)setURL:(id)url range:(NSRange)range;
+- (void)setColor:(id)color range:(NSRange)range;
 @end
 
 @interface IGInstagramAppDelegate : NSObject <UIApplicationDelegate>
@@ -527,6 +562,18 @@
 @end
 
 @interface IGDirectInboxSuggestedThreadCellViewModel : NSObject
+@end
+
+// Backs the main DM inbox list; a Swift class of the same bare name on newer
+// builds, so it is resolved through SPKResolveIGClass.
+@interface IGDirectInboxListAdapterDataSource : NSObject
+- (id)objectsForListAdapter:(id)adapter;
+@end
+
+// Aggregate unread counts behind the app's badges.
+@interface IGBadgeData : NSObject
+@property (readonly, nonatomic) unsigned long long directMessagesServerCalculated;
+@property (readonly, nonatomic) NSNumber *directMessagesClientCalculated;
 @end
 
 @interface IGDirectInboxHeaderCellViewModel : NSObject
@@ -1163,6 +1210,11 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 
 @interface IGTabBarViewControllerManager : NSObject
 @property (readonly, nonatomic) UINavigationController *savedCollectionsNavigationController;
+@end
+
+// Instagram's IGTabBarViewRepresentable: IGTabBar, IGNativeTabBar and the Liquid
+// Glass bar all conform, so the bar is driven whichever one is installed.
+@protocol SPKTabBarViewRepresentable <NSObject>
 @property (readonly, nonatomic) NSArray *buttons;
 - (void)addTabButton:(id)button;
 - (void)clearTabButtons;
@@ -1227,4 +1279,135 @@ typedef FLEXAlertAction *_Nonnull (^FLEXAlertActionHandler)(void (^handler)(NSAr
 - (instancetype)initWithCTAButtonType:(NSInteger)type
     fakeComposerEnabled:(BOOL)enabled
     commentBarDisabled:(BOOL)disabled;
+@end
+
+@interface IGDate : NSObject
+@property (readonly, nonatomic) long long microseconds;
+@property (readonly, nonatomic) NSDate *date;
+@end
+
+// Repost carried by the reply sheet opened from a reel's repost bubble.
+@interface IGRepostModel : NSObject
+@property (readonly, copy, nonatomic) NSString *pk;
+@property (readonly, copy, nonatomic) NSString *mediaId;
+@property (readonly, copy, nonatomic) IGDate *createdAtDate;
+@end
+
+// Layout of the loading placeholder grid; it sets the placeholder tile shape
+// independently of the real thumbnails.
+typedef struct {
+    CGFloat columnSpacing;
+    CGFloat rowSpacing;
+    UIEdgeInsets insets;
+    CGFloat mediasPerRow;
+    CGFloat aspectRatio;
+    CGFloat cellCornerRadius;
+} SPKGridLayoutConfiguration;
+
+// The session's story seen state (-[IGUserSession storySeenStateStore]), read by
+// every story ring; the pog and media stores sit in its _pogSeenStateStore and
+// _mediaSeenStateStore ivars.
+@interface IGStoryPogSeenStateStore : NSObject
+- (id)latestSeenMediaDateForReelPK:(id)reelPK;
+- (void)setLatestSeenMediaDate:(id)date forReelPK:(id)reelPK;
+- (void)setLatestSeenMediaDateForceUpdate:(id)date forReelPK:(id)reelPK;
+- (void)archive;
+@end
+
+@interface IGStoryMediaSeenStateStore : NSObject
+- (void)setSeenMediaId:(id)mediaId forReelPK:(id)reelPK;
+@end
+
+@interface IGStorySeenStateStore : NSObject
+- (void)addSeenDateForStoryItem:(id)item reelPK:(id)reelPK;
+- (void)removeSeenMediaIds:(id)mediaIds forReelPk:(id)reelPK;
+@end
+
+@interface IGDirectInboxViewController : UIViewController
+@end
+
+// Same inbox screen rebuilt in Swift; not a subclass of the above.
+@interface IGDirectInboxSwiftViewController : UIViewController
+@end
+
+// Swift class owning the inbox's Instants peek presentation.
+@interface IGDirectInboxCameraMediaCoordinator : NSObject
+- (void)tryShowQuickSnapPeek;
+@end
+
+// Swift class; its class methods are @objc thunks, so only ObjC call sites see a hook.
+@interface IGQuickSnapExperimentationHelper : NSObject
++ (BOOL)isQuicksnapEnabledInInbox:(id)session;
+@end
+
+// Swift class; its card view is shared by the Direct inbox and the profile corner stack.
+@interface IGQuickSnapPresentationManager : NSObject
+@property (readonly, nonatomic) UIView *cardView;
+@end
+
+// Category on IGUserSession in Instagram; respondsToSelector: before calling.
+@interface IGUserSession (SPKQuickSnapPresentation)
+- (IGQuickSnapPresentationManager *)quickSnapPresentationManager;
+@end
+
+// Instagram's in-app browser: the session carries the request and its ads or
+// sign-in context, the controller presents it inside the navigation container.
+@interface IGBrowserSession : NSObject
+@property (readonly) id webAuthenticationRequest;
+@property (retain, nonatomic) NSNumber *leadGenFormId;
+@end
+
+@interface IGBrowserController : NSObject
+- (void)presentBrowserWithBrowserSession:(IGBrowserSession *)session viewController:(UIViewController *)controller presentingPanGesture:(id)gesture forceFreshLoad:(BOOL)forceFreshLoad;
+@end
+
+@interface IGBrowserNavigationController : UINavigationController
+@property (readonly, nonatomic) IGBrowserSession *browserSession;
+@end
+
+// Swift class IGCommentCells.IGCommentCell, resolved at runtime.
+@interface IGCommentCell : UIView
+@property (readonly, nonatomic) UIView *commentView;
+- (void)bindViewModel:(id)viewModel;
+@end
+
+// Swift class used by the expanded post and Reels caption sheets.
+@interface IGCommentRichCaptionView : UIView
+- (void)configureWith:(id)viewModel;
+- (void)setCoreTextLinkHandler:(id)handler;
+@end
+
+@interface IGFeedItemHeaderCoreTextView : UIView
+@property (nonatomic, copy) IGStyledString *styledString;
+@end
+
+@interface IGFeedItemTextCell : UIView
+@property (readonly, nonatomic) IGCoreTextView *coreTextView;
+@property (readonly, nonatomic) IGStyledString *styledString;
+- (void)setStyledString:(IGStyledString *)styledString;
+- (void)updateStyledString;
+@end
+
+@interface IGUnifiedVideoCaptionView : UIView
+@property (retain, nonatomic) id viewModel;
+- (CGSize)sizeThatFits:(CGSize)size;
+- (void)prepareForAnimationToExpansionPercentage:(double)percentage;
+@end
+
+// Instagram's location stack: IGThreadedLocationManager owns the CLLocationManager on a
+// private thread, and IGLocationManager above it caches the last fix the Friends Map uploads.
+@interface IGThreadedLocationManager : NSObject <CLLocationManagerDelegate>
+@property (readonly, copy, nonatomic) CLLocation *location;
+- (void)locationManager:(CLLocationManager *)manager didUpdateLocations:(NSArray<CLLocation *> *)locations;
+@end
+
+@interface IGLocationManager : NSObject
+@property (retain) CLLocation *lastLocation;
+- (void)locationManager:(id)manager didUpdateLocations:(NSArray<CLLocation *> *)locations;
+@end
+
+// Swift column of round chrome buttons (locate, settings) on the Friends Map, bound
+// through SPKResolveIGClass.
+@interface IGFriendsMapSecondaryButtonsStackView : UIView
+- (void)didTapLocateButton;
 @end

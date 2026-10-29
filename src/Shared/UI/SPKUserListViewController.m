@@ -187,7 +187,11 @@ typedef NS_ENUM(NSInteger, SPKUserListSortMode) {
                                                             [self moreMenu],
                                                             sortOnly ? @"Sort" : @"More")];
     }
-    if (items.count)
+    // A subclass's own buttons get their own bubble at the trailing edge.
+    NSArray<UIBarButtonItem *> *extraItems = [self additionalTrailingBarItems] ?: @[];
+    if (extraItems.count)
+        SPKMediaChromeSetTrailingTopBarItemGroups(self.navigationItem, @[ items, extraItems ]);
+    else if (items.count)
         SPKMediaChromeSetTrailingTopBarItems(self.navigationItem, items);
 }
 
@@ -253,7 +257,7 @@ typedef NS_ENUM(NSInteger, SPKUserListSortMode) {
     self.emptyStateView.hidden = YES;
     [self.view addSubview:self.emptyStateView];
 
-    self.emptyStateIcon = [[UIImageView alloc] initWithImage:[SPKAssetUtils instagramIconNamed:@"users_empty" pointSize:96.0 renderingMode:UIImageRenderingModeAlwaysTemplate]];
+    self.emptyStateIcon = [[UIImageView alloc] initWithImage:[SPKAssetUtils instagramIconNamed:(self.emptyIconName ?: @"users_empty") pointSize:96.0 renderingMode:UIImageRenderingModeAlwaysTemplate]];
     self.emptyStateIcon.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyStateIcon.contentMode = UIViewContentModeScaleAspectFit;
     self.emptyStateIcon.tintColor = [SPKUtils SPKColor_InstagramTertiaryText];
@@ -431,6 +435,10 @@ typedef NS_ENUM(NSInteger, SPKUserListSortMode) {
 }
 
 - (void)listDidUpdateItemCount:(NSUInteger)count {
+}
+
+- (NSArray<UIBarButtonItem *> *)additionalTrailingBarItems {
+    return @[];
 }
 
 @end

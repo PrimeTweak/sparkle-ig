@@ -4,6 +4,8 @@
 #import <objc/runtime.h>
 
 #import "../../AssetUtils.h"
+#import "../../Features/Instants/InstantsAdvance.h"
+#import "../../Features/Instants/InstantsManualSeen.h"
 #import "../../Features/Messages/DeletedMessagesLog/SPKDeletedMessagesViewController.h"
 #import "../../InstagramHeaders.h"
 #import "../../Networking/SPKInstagramAPI.h"
@@ -66,6 +68,7 @@ NSString *const kSPKActionToggleDirectAutoSaveThreadRule = @"toggle_direct_auto_
 NSString *const kSPKActionToggleProfileStorySeenUserRule = @"toggle_profile_story_seen_user_rule";
 NSString *const kSPKActionToggleProfileMessagesSeenUserRule = @"toggle_profile_messages_seen_user_rule";
 NSString *const kSPKActionStoryMentionsSheet = @"story_mentions_sheet";
+NSString *const kSPKActionInstantsMarkSeen = @"instants_mark_seen";
 NSString *const kSPKActionProfileCopyInfo = @"profile_copy_info";
 NSString *const kSPKActionProfileCopyID = @"profile_copy_id";
 NSString *const kSPKActionProfileCopyUsername = @"profile_copy_username";
@@ -1028,7 +1031,7 @@ static NSString *SPKActionButtonDisplayTitleForContext(NSString *identifier,
         id user = SPKResolveMediaForContext(context);
         NSString *pk = user ? [SPKUtils pkFromIGUser:user] : nil;
         if (pk.length > 0) {
-            BOOL manualSeenEnabled = [SPKUtils getBoolPref:@"stories_manual_seen"];
+            BOOL manualSeenEnabled = SPKStoryManualSeenEnabled();
             BOOL listed = SPKStoryManualSeenListContainsUser(pk, manualSeenEnabled);
             BOOL applies = manualSeenEnabled ? !listed : listed;
             return applies ? @"Mark stories seen" : @"Stop marking stories";
@@ -1115,7 +1118,7 @@ static UIImage *SPKIconForActionIdentifier(NSString *identifier, SPKActionButton
         NSString *pk = user ? [SPKUtils pkFromIGUser:user] : nil;
         BOOL applies = YES;
         if (pk.length > 0) {
-            BOOL manualSeenEnabled = [SPKUtils getBoolPref:@"stories_manual_seen"];
+            BOOL manualSeenEnabled = SPKStoryManualSeenEnabled();
             BOOL listed = SPKStoryManualSeenListContainsUser(pk, manualSeenEnabled);
             applies = manualSeenEnabled ? !listed : listed;
         }
@@ -3037,6 +3040,34 @@ static BOOL SPKExecuteToggleDirectAutoSaveThreadRuleAction(SPKActionButtonContex
     return YES;
 }
 
+// The media PK of the Instant on screen, read off the resolved snap.
+static NSString *SPKInstantsMarkSeenMediaPKForContext(SPKActionButtonContext *context) {
+    id media = context ? SPKResolveMediaForContext(context) : nil;
+    if (!media)
+        return nil;
+    NSString *pk = SPKStringFromValue(SPKObjectForSelector(media, @"sourceMediaPK"));
+    if (pk.length == 0)
+        pk = SPKStringFromValue(SPKObjectForSelector(media, @"pk"));
+    return pk;
+}
+
+// Releases one held Instant: it stops being kept unseen and is marked seen for real.
+static BOOL SPKExecuteInstantsMarkSeenAction(SPKActionButtonContext *context) {
+    NSString *pk = SPKInstantsMarkSeenMediaPKForContext(context);
+    if (pk.length == 0) {
+        SPKNotify(kSPKNotificationInstantsMarkSeen, @"Couldn't identify this Instant", nil, @"error_filled",
+                  SPKNotificationToneError);
+        return YES;
+    }
+    SPKInstantsManualSeenMarkMediaPK(pk);
+    SPKNotify(kSPKNotificationInstantsMarkSeen, @"Marked as seen", nil, @"circle_check_filled",
+              SPKNotificationToneSuccess);
+    // The release is written synchronously, so the viewer can move on straight away.
+    if ([SPKUtils getBoolPref:@"instants_advance_on_manual_seen"])
+        SPKInstantsAdvanceViewer(context.view);
+    return YES;
+}
+
 static BOOL SPKExecuteToggleStorySeenUserRuleAction(SPKActionButtonContext *context) {
     SPKStoryContext *storyContext = SPKStoryContextForActionButtonContext(context);
     NSString *title = SPKStoryCurrentUserRuleConfirmationTitle(storyContext);
@@ -3073,7 +3104,7 @@ static BOOL SPKExecuteToggleProfileStorySeenUserRuleAction(SPKActionButtonContex
         return YES;
     }
 
-    BOOL manualSeenEnabled = [SPKUtils getBoolPref:@"stories_manual_seen"];
+    BOOL manualSeenEnabled = SPKStoryManualSeenEnabled();
     BOOL listed = SPKStoryManualSeenListContainsUser(pk, manualSeenEnabled);
     BOOL applies = manualSeenEnabled ? !listed : listed;
 
@@ -3205,6 +3236,9 @@ BOOL SPKExecuteActionIdentifier(NSString *identifier, SPKActionButtonContext *co
     }
     if ([identifier isEqualToString:kSPKActionToggleDirectAutoSaveThreadRule]) {
         return SPKExecuteToggleDirectAutoSaveThreadRuleAction(context);
+    }
+    if ([identifier isEqualToString:kSPKActionInstantsMarkSeen]) {
+        return SPKExecuteInstantsMarkSeenAction(context);
     }
     if ([identifier isEqualToString:kSPKActionToggleStoryAutoSaveUserRule]) {
         return SPKExecuteToggleStoryAutoSaveUserRuleAction(context);

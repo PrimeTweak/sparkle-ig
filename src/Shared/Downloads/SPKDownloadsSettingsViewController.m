@@ -8,6 +8,7 @@
 #import "../AutoSave/SPKAutoSaveSettingsViewController.h"
 #import "../MediaDownload/SPKMediaFFmpeg.h"
 #import "../MediaDownload/SPKMediaQualityManager.h"
+#import "SPKDownloadBackgroundKeeper.h"
 #import "SPKDownloadTypes.h"
 
 @implementation SPKDownloadsSettingsViewController
@@ -95,6 +96,30 @@
                                         step:1
                                        label:@"downloads"
                                singularLabel:@"download"],
+            ({
+                SPKSetting *background = [SPKSetting switchCellWithTitle:@"Continue in Background"
+                                                                    icon:SPKSettingsIcon(@"exit")
+                                                             defaultsKey:kSPKDownloadBackgroundKey];
+                background.reloadsTableOnSwitchChange = YES;
+                background.helpText = @"Downloads keep running after you leave Instagram, conversion and saving included. Long ones play a silent audio track so iOS does not suspend the app.";
+                background;
+            }),
+            ({
+                SPKSetting *notify = [SPKSetting switchCellWithTitle:@"Notify When Finished"
+                                                                icon:SPKSettingsIcon(@"notification")
+                                                         defaultsKey:kSPKDownloadBackgroundNotificationKey];
+                notify.switchChangeHandler = ^(BOOL isOn) {
+                    [[NSUserDefaults standardUserDefaults] setBool:isOn forKey:SPKEffectivePreferenceKey(kSPKDownloadBackgroundNotificationKey)];
+                    // Asked for only on the way on, so opening this page never prompts.
+                    if (isOn)
+                        [SPKDownloadBackgroundKeeper requestNotificationAuthorization];
+                };
+                notify.hiddenProvider = ^BOOL {
+                    return ![SPKUtils getBoolPref:kSPKDownloadBackgroundKey];
+                };
+                notify.helpText = @"A notification when downloads finish while you are away from Instagram. Tap it to open Download History.";
+                notify;
+            }),
             [SPKSetting stepperCellWithTitle:@"History Limit"
                                     subtitle:@"%@ saved %@"
                                         icon:SPKSettingsIcon(@"history")

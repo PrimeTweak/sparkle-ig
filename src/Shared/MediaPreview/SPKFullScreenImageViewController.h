@@ -9,6 +9,22 @@
 /// Reports the zoom state of the content so the host can adapt chrome (e.g.
 /// show a material backing behind the bars when content fills behind them).
 - (void)mediaContent:(UIViewController *)controller didChangeZoomState:(BOOL)isZoomed;
+/// Reports Live Text highlighting. VisionKit then draws its "Copy All" action over
+/// the bottom of the image, inside the content, so the host moves its own chrome away.
+- (void)mediaContent:(UIViewController *)controller
+    didChangeLiveTextHighlight:(BOOL)highlighted;
+/// Picture in Picture took the video out of the viewer. The host gets out of the
+/// way (the floating window is the point of PiP) while keeping itself and its
+/// pages alive, so the window's restore button has something to return to.
+- (void)mediaContentWillStartPictureInPicture:(UIViewController *)controller;
+/// The restore button was pressed. The host puts itself back on screen and calls
+/// `completion` with whether the content is in a window again; AVKit animates the
+/// window back into the player only after that.
+- (void)mediaContent:(UIViewController *)controller
+    restorePictureInPictureWithCompletion:(void (^)(BOOL restored))completion;
+/// The session ended. If the host stepped aside and was never restored, this is
+/// where it finishes the dismissal it deferred.
+- (void)mediaContentDidStopPictureInPicture:(UIViewController *)controller;
 @end
 
 NS_ASSUME_NONNULL_BEGIN
@@ -39,6 +55,11 @@ static inline BOOL SPKFullScreenPreviewShouldInsetMediaBetweenBars(void) {
     return window.safeAreaInsets.bottom <= 0.0;
 }
 
+/// YES when VisionKit can analyze images on this device: iOS 16+ with an analyzer
+/// the hardware supports. The Live Text controls over the photo preview, and the
+/// setting that governs them, are both meaningless without it.
+FOUNDATION_EXPORT BOOL SPKLiveTextIsSupported(void);
+
 @interface SPKFullScreenImageViewController : UIViewController
 
 @property (nonatomic, strong, readonly) SPKMediaItem *mediaItem;
@@ -50,6 +71,10 @@ static inline BOOL SPKFullScreenPreviewShouldInsetMediaBetweenBars(void) {
 - (void)cleanup;
 - (void)resetZoomIfNeeded;
 - (void)applyMediaContentInsets:(UIEdgeInsets)insets;
+/// Distance from the bottom of the screen to the top of the host's action toolbar,
+/// measured by the host while the chrome is visible. Floating controls anchor to it
+/// instead of the safe area, which shrinks and grows as the bars come and go.
+- (void)applyChromeBottomLimit:(CGFloat)bottomLimit;
 
 @end
 

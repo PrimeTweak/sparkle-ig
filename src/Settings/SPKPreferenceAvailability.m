@@ -3,6 +3,7 @@
 #import <UIKit/UIKit.h>
 
 #import "../App/SPKFlexLoader.h"
+#import "../Shared/MediaPreview/SPKFullScreenImageViewController.h"
 #import "SPKPreferences.h"
 
 static BOOL SPKIsIOSVersionAtLeast(NSString *version) {
@@ -20,13 +21,18 @@ BOOL SPKPrefIsAvailable(NSString *key) {
         return YES;
     }
 
-    // Progressive blur relies on UIScrollEdgeEffect, which only exists on iOS 26+.
-    if ([key isEqualToString:kSPKPrefInterfaceProgressiveBlur]) {
+    // The scroll edge style relies on UIScrollEdgeEffect, which only exists on iOS 26+.
+    if ([key isEqualToString:kSPKPrefInterfaceScrollEdgeStyle]) {
         return SPKIsIOSVersionAtLeast(@"26.0");
     }
 
     if ([key isEqualToString:@"notifs_pill_liquid_glass"]) {
         return SPKIsIOSVersionAtLeast(@"26.0");
+    }
+
+    // Live Text needs VisionKit's image analyzer: iOS 16+ on supported hardware.
+    if ([key isEqualToString:@"general_preview_live_text"]) {
+        return SPKLiveTextIsSupported();
     }
 
     if ([key isEqualToString:kSPKPrefInstantsDisableCameraControl]) {

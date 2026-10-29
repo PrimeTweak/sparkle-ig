@@ -12,9 +12,9 @@
 // snap when it opens, and each tap advances to the next one. Those are the only two
 // moments the displayed snap changes, so those are the only two moments worth looking.
 //
-// Resolution is view-only (SPKInstantsResolveActiveSnapInView). The snap store is not
-// usable here: IG pops the displayed snap off it, so the store holds what's still
-// queued and never what's on screen.
+// Resolution starts from the live service-removal tracker and uses the view as the
+// initial/fallback identity source. The snap store alone is not usable here: IG pops the
+// displayed snap off it, so the store holds what's still queued and never what's on screen.
 
 // Three things make the answer arrive late: the swap animation has to land before the new
 // snap is frontmost, its image has to finish loading before it resolves, and the store

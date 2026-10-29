@@ -1,7 +1,5 @@
-#import "../UI/SPKDialog.h"
 #import "SPKDirectAutoSave.h"
 
-#import "../../Networking/SPKInstagramAPI.h"
 #import "../../Utils.h"
 #import "../ActionButton/ActionButtonCore.h"
 #import "../ActionButton/ActionButtonLookupUtils.h"
@@ -14,6 +12,7 @@
 #import "../UI/SPKIGAlertPresenter.h"
 #import "../UI/SPKNotificationCenter.h"
 #import "../UI/SPKUserListViewController.h"
+#import "SPKDirectAddThreadPrompt.h"
 #import "SPKDirectSeenContext.h"
 #import "SPKDirectUserResolver.h"
 
@@ -297,104 +296,20 @@ void SPKDirectPresentAutoSaveThreadRuleToggle(SPKDirectThreadContext *context) {
     return items;
 }
 
-- (void)presentError:(NSString *)message {
-    [SPKDialog presentFromController:self
-                                                  title:@"Unable to Add Chat"
-                                                message:message
-                                                actions:@[ [SPKDialogAction actionWithTitle:@"OK" style:SPKDialogActionStyleCancel handler:nil] ]];
-}
-
 - (void)didTapAdd {
-    __weak typeof(self) weakSelf = self;
-    [SPKDialog presentTextInputFromController:self
-                                                           title:@"Add Chat"
-                                                         message:@"Enter the Instagram username for a 1:1 DM thread. Group chats can be added from the viewer's action menu."
-                                                     placeholder:@"username"
-                                                     initialText:nil
-                                                 autocapitalized:NO
-                                                    confirmTitle:@"Search"
-                                                     cancelTitle:@"Cancel"
-                                                    confirmStyle:SPKDialogActionStyleDefault
-                                                    confirmBlock:^(NSString *text) {
-                                                        [weakSelf lookupUsername:text];
-                                                    }
-                                                     cancelBlock:nil];
-}
-
-- (void)lookupUsername:(NSString *)rawUsername {
-    NSString *username = [SPKUtils sanitizedInstagramUsername:rawUsername];
-    if (username.length == 0)
-        return;
+    SPKDirectAddThreadPromptCopy *copy = [SPKDirectAddThreadPromptCopy new];
+    copy.promptTitle = @"Add Chat";
+    copy.promptMessage = @"Enter the Instagram username for a 1:1 DM thread. Group chats can be added from the viewer's action menu.";
+    copy.confirmTitle = @"Auto-save this chat";
+    copy.errorTitle = @"Unable to Add Chat";
+    copy.userNotFoundFormat = @"User '%@' was not found.";
+    copy.noThreadFormat = @"No 1:1 DM thread was found with @%@.";
+    copy.unresolvedUserText = @"Could not resolve this user's Instagram ID.";
 
     __weak typeof(self) weakSelf = self;
-    [SPKInstagramAPI resolveUserForUsername:username
-                                  completion:^(NSDictionary *user, NSError *error) {
-                                      __strong typeof(weakSelf) strongSelf = weakSelf;
-                                      if (!strongSelf)
-                                          return;
-                                      if (![user isKindOfClass:[NSDictionary class]] || error) {
-                                          [strongSelf presentError:[NSString stringWithFormat:@"User '%@' was not found.", username]];
-                                          return;
-                                      }
-                                      NSString *pk = SPKStringFromValue(user[@"pk"] ?: user[@"id"]);
-                                      if (pk.length == 0) {
-                                          [strongSelf presentError:@"Could not resolve this user's Instagram ID."];
-                                          return;
-                                      }
-                                      [strongSelf resolveThreadForPK:pk
-                                                            username:SPKStringFromValue(user[@"username"]) ?: username
-                                                            fullName:SPKStringFromValue(user[@"full_name"] ?: user[@"fullName"]) ?: @""
-                                                       profilePicUrl:SPKStringFromValue(user[@"profile_pic_url"] ?: user[@"profile_pic_url_hd"])];
-                                  }];
-}
-
-// The list is keyed by thread, so a username has to be turned into the 1:1 thread it
-// maps to. A user you've never DM'd has no thread to key on.
-- (void)resolveThreadForPK:(NSString *)pk username:(NSString *)username fullName:(NSString *)fullName profilePicUrl:(NSString *)profilePicUrl {
-    NSString *encodedRecipients = [[NSString stringWithFormat:@"[%@]", pk] stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLQueryAllowedCharacterSet];
-    __weak typeof(self) weakSelf = self;
-    [SPKInstagramAPI sendRequestWithMethod:@"GET"
-                                      path:[NSString stringWithFormat:@"direct_v2/threads/get_by_participants/?recipient_users=%@", encodedRecipients]
-                                      body:nil
-                                completion:^(NSDictionary *threadResponse, NSError *threadError) {
-                                    __strong typeof(weakSelf) strongSelf = weakSelf;
-                                    if (!strongSelf)
-                                        return;
-                                    NSDictionary *thread = threadResponse[@"thread"];
-                                    NSString *threadId = [thread isKindOfClass:[NSDictionary class]]
-                                                             ? SPKStringFromValue(thread[@"thread_id"] ?: thread[@"threadId"])
-                                                             : nil;
-                                    if (threadId.length == 0 || threadError) {
-                                        [strongSelf presentError:[NSString stringWithFormat:@"No 1:1 DM thread was found with @%@.", username]];
-                                        return;
-                                    }
-
-                                    NSMutableDictionary *userEntry = [@{@"pk" : pk, @"username" : username, @"fullName" : fullName} mutableCopy];
-                                    if (profilePicUrl.length > 0)
-                                        userEntry[@"profilePicUrl"] = profilePicUrl;
-                                    NSDictionary *entry = @{
-                                        @"threadId" : threadId,
-                                        @"threadName" : SPKStringFromValue(thread[@"thread_title"]) ?: username,
-                                        @"isGroup" : @(NO),
-                                        @"users" : @[ userEntry.copy ],
-                                    };
-
-                                    NSString *message = fullName.length > 0 ? [NSString stringWithFormat:@"@%@ (%@)", username, fullName]
-                                                                            : [@"@" stringByAppendingString:username];
-                                    [SPKDialog presentFromController:strongSelf
-                                                                                  title:@"Auto-save this chat"
-                                                                                message:message
-                                                                                actions:@[
-                                                                                    [SPKDialogAction actionWithTitle:@"Cancel"
-                                                                                                                style:SPKDialogActionStyleCancel
-                                                                                                              handler:nil],
-                                                                                    [SPKDialogAction actionWithTitle:@"Add"
-                                                                                                                style:SPKDialogActionStyleDefault
-                                                                                                              handler:^{
-                                                                                                                  [strongSelf addResolvedEntry:entry username:username];
-                                                                                                              }],
-                                                                                ]];
-                                }];
+    SPKDirectPresentAddThreadPrompt(self, copy, ^(NSDictionary *entry, NSString *username) {
+        [weakSelf addResolvedEntry:entry username:username];
+    });
 }
 
 - (void)addResolvedEntry:(NSDictionary *)entry username:(NSString *)username {

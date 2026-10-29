@@ -384,6 +384,16 @@ static UIView *spkFindCanvasDeep(UIView *root, NSInteger depth) {
                           : nil;
 }
 
+- (UIView *)chromeAnchorView {
+    return _chromeCanvas;
+}
+
+- (void)addChromeSubview:(UIView *)view {
+    if (!view)
+        return;
+    [_chromeCanvas.contentContainer addSubview:view];
+}
+
 - (void)layoutSubviews {
     [super layoutSubviews];
 

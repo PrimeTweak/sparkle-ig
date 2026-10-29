@@ -11,7 +11,8 @@ NSString *const kSPKPrefInterfaceDisableLiquidGlass = @"interface_disable_liquid
 // iOS draw, so the app wears one style or the other and never a mix.
 NSString *const kSPKPrefSparkleAppearance = @"action_button_sparkle_menu";
 NSString *const kSPKPrefInterfaceLiquidGlassTabBarMode = @"interface_liquid_glass_tabbar_mode";
-NSString *const kSPKPrefInterfaceProgressiveBlur = @"interface_progressive_blur";
+NSString *const kSPKPrefInterfaceScrollEdgeStyle = @"interface_scroll_edge_style";
+NSNotificationName const SPKScrollEdgeStyleDidChangeNotification = @"SPKScrollEdgeStyleDidChangeNotification";
 NSString *const kSPKPrefInstantsDisableCameraControl = @"instants_disable_camera_control";
 
 NSString *SPKPrefActionButtonConfigKey(NSString *topicKey) {

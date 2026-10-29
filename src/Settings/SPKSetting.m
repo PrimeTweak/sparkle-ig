@@ -12,6 +12,8 @@
 
 ///
 
+NSNotificationName const SPKSettingAccessoryTextDidChangeNotification = @"SPKSettingAccessoryTextDidChangeNotification";
+
 @implementation SPKSetting
 
 // MARK: - - initWithType

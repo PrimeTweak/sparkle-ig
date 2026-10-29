@@ -52,6 +52,7 @@ FOUNDATION_EXPORT NSString *const kSPKActionProfileCopyUsername;
 FOUNDATION_EXPORT NSString *const kSPKActionProfileCopyName;
 FOUNDATION_EXPORT NSString *const kSPKActionProfileCopyBio;
 FOUNDATION_EXPORT NSString *const kSPKActionProfileCopyLink;
+FOUNDATION_EXPORT NSString *const kSPKActionInstantsMarkSeen;
 FOUNDATION_EXPORT NSString *const SPKActionButtonConfigurationDidChangeNotification;
 
 @interface SPKActionMenuButton : SPKChromeButton

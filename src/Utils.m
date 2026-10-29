@@ -1060,11 +1060,12 @@ static BOOL SPKPrefIsGlobalKey(NSString *key) {
             @"app_startup_profiling",
             @"interface_disable_liquid_glass",
             @"interface_liquid_glass_tabbar_mode",
-            @"interface_progressive_blur",
+            @"interface_scroll_edge_style",
             @"downloads_adv_encoding",
             // Tab/launch layout is configured once at launch and can't re-apply
             // on a live account switch, so it stays global (maintainer's call).
             @"interface_nav_order",
+            @"interface_custom_tab_order",
             @"interface_swipe_tabs",
             @"interface_launch_tab",
             // The bar is assembled during early launch, before the session resolves,
@@ -1076,6 +1077,7 @@ static BOOL SPKPrefIsGlobalKey(NSString *key) {
             @"interface_hide_profile_tab",
             @"interface_hide_create_tab",
             @"interface_hide_tab_bar_in_messages_only",
+            @"interface_saved_tab_carrier",
             // The Settings quick-access long-press is attached to tab-bar buttons
             // as they're built during early launch — before the account session
             // resolves — so a per-account effective key resolves against the
@@ -1099,6 +1101,13 @@ static BOOL SPKPrefIsGlobalKey(NSString *key) {
             @"reels_prevent_doom_scroll",
             @"reels_doom_scroll_limit",
             @"reels_disable_scrolling",
+            // Instagram keeps one sound state for the whole app, and the hooks that
+            // mute it install once per launch.
+            @"reels_disable_auto_unmute",
+            // Saved fake locations are a library of places, not a setting: every
+            // account picks from the same list, while the active place and the on
+            // switch stay per account.
+            @"msgs_fake_location_saved_places",
         ]];
     });
     if ([globalExact containsObject:key])
@@ -1891,6 +1900,10 @@ static NSDate *SPKScanObjectForPostedDate(id target, NSInteger depth) {
 
 + (UIColor *)SPKColor_InstagramDestructive {
     return SPKInstagramDestructiveColor();
+}
+
++ (UIColor *)SPKColor_InstagramSuccess {
+    return [UIColor colorWithRed:28.0 / 255.0 green:209.0 / 255.0 blue:79.0 / 255.0 alpha:1.0];
 }
 
 + (UIColor *)SPKColor_InstagramPressedBackground {

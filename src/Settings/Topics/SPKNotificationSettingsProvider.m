@@ -82,19 +82,43 @@
 }
 
 + (NSArray *)sections {
+    SPKSetting *style = [SPKSetting menuCellWithTitle:@"Style"
+                                                 icon:SPKSettingsIcon(@"palette")
+                                                 menu:SPKNotificationStyleMenu()];
+    style.helpText = @"Sparkle pill is Sparkle's own banner; Instagram uses the toast Instagram shows for its own confirmations. Both appear over every screen.";
+    style.searchKeywords = @"toast pill banner instagram style";
+
+    // Glow and Tint by result are one preference: the pill shows the result's
+    // colour as a glow, the Instagram toast as a tint.
+    SPKSetting *glow = [SPKSetting switchCellWithTitle:@"Glow effect"
+                                              subtitle:@""
+                                                  icon:SPKSettingsIcon(@"aura")
+                                           defaultsKey:kSPKNotificationPillGlowEnabledKey];
+    glow.hiddenProvider = ^BOOL {
+        return SPKNotificationUsesInstagramStyle();
+    };
+    SPKSetting *tint = [SPKSetting switchCellWithTitle:@"Tint by result"
+                                              subtitle:@""
+                                                  icon:SPKSettingsIcon(@"aura")
+                                           defaultsKey:kSPKNotificationPillGlowEnabledKey];
+    tint.helpText = @"Tints the toast in the result's color: green for success, red for errors, blue otherwise.";
+    tint.hiddenProvider = ^BOOL {
+        return !SPKNotificationUsesInstagramStyle();
+    };
+    SPKSetting *liquidGlass = [SPKSetting switchCellWithTitle:@"Liquid Glass"
+                                                     subtitle:@""
+                                                         icon:SPKSettingsIcon(@"mirror")
+                                                  defaultsKey:kSPKNotificationPillLiquidGlassEnabledKey];
+    liquidGlass.hiddenProvider = ^BOOL {
+        return SPKNotificationUsesInstagramStyle();
+    };
+
     NSMutableArray *sections = [NSMutableArray arrayWithArray:@[
         SPKTopicSection(@"Appearance", @[
-            ({
-                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Glow effect"
-                                   subtitle:@""
-                           icon:SPKSettingsIcon(@"aura")
-                                defaultsKey:kSPKNotificationPillGlowEnabledKey];
-                row;
-            }),
-            [SPKSetting switchCellWithTitle:@"Liquid Glass"
-                                   subtitle:@""
-                                       icon:SPKSettingsIcon(@"mirror")
-                                defaultsKey:kSPKNotificationPillLiquidGlassEnabledKey],
+            style,
+            glow,
+            tint,
+            liquidGlass,
             // Banner haptics only, beside the other rows that describe the banner.
             // Disable haptics in General sits above it and silences everything.
             [SPKSetting switchCellWithTitle:@"Haptics with banners"

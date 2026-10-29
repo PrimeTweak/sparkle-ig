@@ -22,6 +22,12 @@ static NSArray *SPKFeedCommentsSections(void) {
     commentMediaActions.helpText = @"Adds Photos, Share, Gallery and link actions to GIF and photo comments.";
     commentMediaActions.searchKeywords = @"comment gif photos share gallery link";
 
+    SPKSetting *commentGIFTitle = [SPKSetting switchCellWithTitle:@"Show GIF title"
+                                                             icon:SPKSettingsIcon(@"gif")
+                                                      defaultsKey:@"general_comments_gif_title"];
+    commentGIFTitle.helpText = @"Shows a GIF comment's name and channel in its menu; tap to copy the name. Each lookup asks giphy.com about that GIF.";
+    commentGIFTitle.searchKeywords = @"gif name title channel giphy copy";
+
     SPKSetting *commentGalleryUpload = [SPKSetting switchCellWithTitle:@"Attach photo to comments"
                                                                   icon:SPKSettingsIcon(@"photo")
                                                            defaultsKey:@"general_comments_gallery_upload"];
@@ -85,6 +91,7 @@ static NSArray *SPKFeedCommentsSections(void) {
                 commentSortMode,
                 copyComment,
                 commentMediaActions,
+                commentGIFTitle,
                 commentGalleryUpload,
                 swipeCloseComments,
                 swipeDirection,

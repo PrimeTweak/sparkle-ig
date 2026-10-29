@@ -55,6 +55,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// choice itself (the settings screen routes it through menuChanged:).
 @property (nonatomic, copy, nullable) void (^pickHandler)(void);
 
+/// nil = the key's stored value decides. Set it on pages that stage their
+/// choices before writing them.
+@property (nonatomic, copy, nullable) BOOL (^selectedProvider)(void);
+
 /// Runs right after the preference is written, mirroring `switchChangeHandler`
 /// on a switch row — for families whose rows do more than store a bool.
 @property (nonatomic, copy, nullable) void (^changeHandler)(BOOL isOn);

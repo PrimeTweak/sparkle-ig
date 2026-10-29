@@ -17,29 +17,6 @@
 #endif
 #import "SPKInterfaceSettingsProvider.h"
 
-static UIViewController *SPKSettingsLockPresenter(void) {
-    UIViewController *presenter = UIApplication.sharedApplication.keyWindow.rootViewController;
-    while (presenter.presentedViewController)
-        presenter = presenter.presentedViewController;
-    return presenter;
-}
-
-static void SPKSettingsLockReloadPresenter(UIViewController *presenter) {
-    // `presenter` is the topmost presented VC, which is usually the navigation
-    // controller wrapping the settings page rather than the page itself. Reload
-    // whichever SPKSettingsViewController is actually on screen so the Change
-    // Passcode row greys/ungreys with the lock toggle.
-    SPKSettingsViewController *settingsVC = nil;
-    if ([presenter isKindOfClass:SPKSettingsViewController.class]) {
-        settingsVC = (SPKSettingsViewController *)presenter;
-    } else if ([presenter isKindOfClass:UINavigationController.class]) {
-        UIViewController *top = ((UINavigationController *)presenter).topViewController;
-        if ([top isKindOfClass:SPKSettingsViewController.class])
-            settingsVC = (SPKSettingsViewController *)top;
-    }
-    [settingsVC.tableView reloadData];
-}
-
 static NSDictionary *SPKSettingsLockSection(void) {
     SPKSetting *lockSwitch = [SPKSetting switchCellWithTitle:@"Passcode lock"
                                                         icon:SPKSettingsIcon(@"lock")
@@ -51,13 +28,13 @@ static NSDictionary *SPKSettingsLockSection(void) {
     };
     lockSwitch.switchChangeHandler = ^(BOOL enabled) {
         SPKSettingsLockManager *currentManager = [SPKSettingsLockManager sharedManager];
-        UIViewController *presenter = SPKSettingsLockPresenter();
+        UIViewController *presenter = SPKSettingsTopPresenter();
         if (enabled && !currentManager.isLockEnabled) {
             [SPKGalleryLockViewController presentMode:SPKGalleryLockModeSetPasscode
                                            forManager:currentManager
                                    fromViewController:presenter
                                            completion:^(__unused BOOL success) {
-                                               SPKSettingsLockReloadPresenter(presenter);
+                                               SPKSettingsReloadPresenter(presenter);
                                            }];
             return;
         }
@@ -69,13 +46,13 @@ static NSDictionary *SPKSettingsLockSection(void) {
                                                             [SPKDialogAction actionWithTitle:@"Cancel"
                                                                                         style:SPKDialogActionStyleCancel
                                                                                       handler:^{
-                                                                                          SPKSettingsLockReloadPresenter(presenter);
+                                                                                          SPKSettingsReloadPresenter(presenter);
                                                                                       }],
                                                             [SPKDialogAction actionWithTitle:@"Disable"
                                                                                         style:SPKDialogActionStyleDestructive
                                                                                       handler:^{
                                                                                           [currentManager removePasscode];
-                                                                                          SPKSettingsLockReloadPresenter(presenter);
+                                                                                          SPKSettingsReloadPresenter(presenter);
                                                                                       }],
 ]];
         }
@@ -87,7 +64,7 @@ static NSDictionary *SPKSettingsLockSection(void) {
                                                           action:^{
                                                               [SPKGalleryLockViewController presentMode:SPKGalleryLockModeChangePasscode
                                                                                              forManager:[SPKSettingsLockManager sharedManager]
-                                                                                     fromViewController:SPKSettingsLockPresenter()
+                                                                                     fromViewController:SPKSettingsTopPresenter()
                                                                                              completion:^(__unused BOOL success){
                                                                                              }];
                                                           }];
@@ -176,6 +153,31 @@ flexGesture.helpText = @"Hold three fingers anywhere in Instagram to open the FL
         SPKSettingsLockSection(),
         SPKTopicSection(@"Instagram", instagramCells, instagramFooter),
         SPKTopicSection(@"Tweak", @[
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Quick settings access"
+                                                             icon:SPKSettingsIcon(@"settings")
+                                                      defaultsKey:@"tools_settings_shortcut"
+                                                  requiresRestart:YES];
+                row.helpText = @"Long-press the Home tab, or the first visible tab when Home is hidden, to open Sparkle settings.";
+                row.searchKeywords = @"long press tab shortcut open settings";
+                row;
+            }),
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Shortcut haptics"
+                                                             icon:SPKSettingsIcon(@"haptics")
+                                                      defaultsKey:@"tools_shortcut_haptics"];
+                row.helpText = @"A light tap confirms the long-press shortcuts and the feed header button.";
+                row.searchKeywords = @"vibration feedback shortcut";
+                row;
+            }),
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Open settings at launch"
+                                                             icon:SPKSettingsIcon(@"play")
+                                                      defaultsKey:@"tools_open_settings_on_launch"];
+                row.helpText = @"Opens Sparkle settings each time Instagram starts.";
+                row.searchKeywords = @"startup launch open automatically";
+                row;
+            }),
             ({
                 SPKSetting *row0 = [SPKSetting buttonCellWithTitle:@"Show onboarding"
                                    subtitle:nil

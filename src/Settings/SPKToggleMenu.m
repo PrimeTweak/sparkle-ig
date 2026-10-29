@@ -154,7 +154,9 @@ static void SPKToggleMenuAskForRestartIfNeeded(void) {
 - (void)refreshAnimated:(BOOL)animated {
     BOOL enabled = [self.item isEnabled];
     BOOL on;
-    if (self.item.pickValue.length > 0)
+    if (self.item.selectedProvider)
+        on = self.item.selectedProvider();
+    else if (self.item.pickValue.length > 0)
         on = [[SPKUtils getStringPref:self.item.defaultsKey] isEqualToString:self.item.pickValue];
     else
         on = enabled ? [SPKUtils getBoolPref:self.item.defaultsKey] : NO;

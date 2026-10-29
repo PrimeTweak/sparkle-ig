@@ -539,7 +539,10 @@ static void SPKInstallDirectInboxSeenContextMenuHook(void) {
             return nil;
         }
         BOOL applies = SPKDirectManualSeenAppliesToSource(context);
-        UIImage *image = [SPKAssetUtils instagramIconNamed:applies ? @"eye_off" : @"eye"];
+        // Instagram's own rows in this menu carry 24pt glyphs, so this row matches them
+        // rather than the 22pt of menus Sparkle owns outright.
+        UIImage *image = [SPKAssetUtils menuIconNamed:applies ? @"eye_off" : @"eye"
+                                            pointSize:kSPKInstagramMenuIconPointSize];
         UIAction *toggleAction = [UIAction actionWithTitle:title
                                                      image:image
                                                 identifier:nil

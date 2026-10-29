@@ -39,32 +39,19 @@ static const void *kSPKStoryOverlayHasObserverAssocKey = &kSPKStoryOverlayHasObs
 static void *kSPKStoryOverlayAlphaObserverContext = &kSPKStoryOverlayAlphaObserverContext;
 static __weak UIView *SPKActiveStoryOverlayView = nil;
 
-static id SPKKVCObject(id target, NSString *key);
 static id SPKObjectForSelector(id target, NSString *selectorName);
-static id SPKFirstObjectForSelectors(id target, NSArray<NSString *> *selectors);
 void SPKMarkStoryAsSeenForViewWithAdvancePref(UIView *view, NSString *advancePrefKey);
 
 static inline BOOL SPKManualStorySeenEnabled(void) {
-    return [SPKUtils getBoolPref:@"stories_manual_seen"];
+    return SPKStoryManualSeenEnabled();
 }
 static inline BOOL SPKStorySeenHooksNeeded(void) {
-    return [SPKUtils getBoolPref:@"stories_manual_seen"] ||
+    return SPKStoryManualSeenEnabled() ||
            SPKStoryManualSeenUserList(NO).count > 0 ||
            [SPKUtils getBoolPref:@"stories_mentions_btn"] ||
            [SPKUtils getBoolPref:@"stories_mark_seen_on_reply"] ||
            [SPKUtils getBoolPref:@"stories_advance_on_reply_seen"];
 }
-static id SPKKVCObject(id target, NSString *key) {
-    if (!target || key.length == 0)
-        return nil;
-
-    @try {
-        return [target valueForKey:key];
-    } @catch (__unused NSException *exception) {
-        return nil;
-    }
-}
-
 static id SPKObjectForSelector(id target, NSString *selectorName) {
     if (!target || selectorName.length == 0)
         return nil;
@@ -74,17 +61,6 @@ static id SPKObjectForSelector(id target, NSString *selectorName) {
         return nil;
 
     return ((id (*)(id, SEL))objc_msgSend)(target, selector);
-}
-
-static id SPKFirstObjectForSelectors(id target, NSArray<NSString *> *selectors) {
-    if (!target || selectors.count == 0)
-        return nil;
-    for (NSString *selectorName in selectors) {
-        id value = SPKObjectForSelector(target, selectorName);
-        if (value)
-            return value;
-    }
-    return nil;
 }
 
 static void SPKPlayButtonTappedHaptic(void) {
@@ -220,144 +196,6 @@ static CGRect SPKStorySeenBaseFrame(UIView *overlayView) {
     return SPKStoryFloatingButtonFrame(overlayView, 44.0);
 }
 
-static id SPKStorySectionControllerFromOverlayView(UIView *overlayView) {
-    if (!overlayView)
-        return nil;
-
-    NSArray<NSString *> *delegateSelectors = @[ @"mediaOverlayDelegate", @"retryDelegate", @"tappableOverlayDelegate", @"buttonDelegate" ];
-    Class sectionControllerClass = NSClassFromString(@"IGStoryFullscreenSectionController");
-
-    for (NSString *selectorName in delegateSelectors) {
-        SEL selector = NSSelectorFromString(selectorName);
-        if (![overlayView respondsToSelector:selector])
-            continue;
-
-        id delegate = ((id (*)(id, SEL))objc_msgSend)(overlayView, selector);
-        if (!delegate)
-            continue;
-
-        if (!sectionControllerClass || [delegate isKindOfClass:sectionControllerClass]) {
-            return delegate;
-        }
-    }
-
-    return nil;
-}
-
-static NSString *SPKStringFromValue(id value) {
-    if (!value || value == (id)kCFNull)
-        return nil;
-    if ([value isKindOfClass:[NSString class]]) {
-        NSString *string = (NSString *)value;
-        return string.length > 0 ? string : nil;
-    }
-    if ([value respondsToSelector:@selector(stringValue)]) {
-        NSString *string = [value stringValue];
-        return string.length > 0 ? string : nil;
-    }
-    return [[value description] length] > 0 ? [value description] : nil;
-}
-
-static id SPKStoryMediaFromAnyObject(id object) {
-    if (!object)
-        return nil;
-    id candidate = SPKFirstObjectForSelectors(object, @[ @"media", @"mediaItem", @"storyItem", @"item", @"model" ]);
-    return candidate ?: object;
-}
-
-static BOOL SPKResolveStoryContextFromOverlay(UIView *overlayView, id *outMarkTarget, id *outSectionController, id *outMedia) {
-    SPKStoryContext *sharedContext = SPKStoryContextFromOverlay(overlayView);
-    if (sharedContext) {
-        if (outMarkTarget)
-            *outMarkTarget = sharedContext.markSeenTarget;
-        if (outSectionController)
-            *outSectionController = sharedContext.sectionController;
-        if (outMedia)
-            *outMedia = sharedContext.media;
-        return (sharedContext.media != nil);
-    }
-
-    if (!overlayView)
-        return NO;
-
-    SEL markSelector = NSSelectorFromString(@"fullscreenSectionController:didMarkItemAsSeen:");
-    UIViewController *viewerController = [SPKUtils nearestViewControllerForView:overlayView];
-
-    id sectionController = SPKStorySectionControllerFromOverlayView(overlayView);
-    id markTarget = nil;
-    id sectionDelegate = SPKObjectForSelector(sectionController, @"delegate");
-    if (sectionDelegate && [sectionDelegate respondsToSelector:markSelector]) {
-        markTarget = sectionDelegate;
-    } else if (viewerController && [viewerController respondsToSelector:markSelector]) {
-        markTarget = viewerController;
-    } else {
-        id overlayAncestor = SPKObjectForSelector(overlayView, @"_viewControllerForAncestor");
-        if (overlayAncestor && [overlayAncestor respondsToSelector:markSelector]) {
-            markTarget = overlayAncestor;
-        }
-    }
-
-    if (!sectionController && markTarget) {
-        sectionController = SPKFirstObjectForSelectors(markTarget, @[ @"currentSectionController" ]);
-        if (!sectionController) {
-            sectionController = [SPKUtils getIvarForObj:markTarget name:"_currentSectionController"];
-        }
-    }
-
-    id media = SPKFirstObjectForSelectors(sectionController, @[ @"currentStoryItem", @"currentItem", @"item" ]);
-    if (!media)
-        media = SPKFirstObjectForSelectors(markTarget, @[ @"currentStoryItem", @"currentItem", @"item" ]);
-    if (!media && viewerController)
-        media = SPKFirstObjectForSelectors(viewerController, @[ @"currentStoryItem", @"currentItem", @"item" ]);
-    media = SPKStoryMediaFromAnyObject(media);
-
-    if (outMarkTarget)
-        *outMarkTarget = markTarget;
-    if (outSectionController)
-        *outSectionController = sectionController;
-    if (outMedia)
-        *outMedia = media;
-
-    return (media != nil);
-}
-
-static void SPKAdvanceStoryAfterManualSeenIfNeeded(UIView *overlayView, NSString *advancePrefKey) {
-    SPKStoryContext *sharedContext = SPKStoryContextFromOverlay(overlayView);
-    if (sharedContext) {
-        SPKStoryAdvanceContextIfNeeded(sharedContext, advancePrefKey);
-        return;
-    }
-
-    if (advancePrefKey.length == 0 || ![SPKUtils getBoolPref:advancePrefKey])
-        return;
-
-    id sectionController = SPKStorySectionControllerFromOverlayView(overlayView);
-    if (!sectionController)
-        return;
-
-    SPKForceStoryAutoAdvance = YES;
-    BOOL advanced = NO;
-    SEL advanceSelector = NSSelectorFromString(@"advanceToNextItemWithNavigationAction:");
-    if ([sectionController respondsToSelector:advanceSelector]) {
-        ((void (*)(id, SEL, NSInteger))objc_msgSend)(sectionController, advanceSelector, 1);
-        advanced = YES;
-    }
-
-    if (!advanced) {
-        advanceSelector = NSSelectorFromString(@"storyPlayerMediaViewDidPlayToEnd:");
-        if ([sectionController respondsToSelector:advanceSelector]) {
-            id mediaView = [SPKUtils getIvarForObj:sectionController name:"_mediaView"];
-            if (!mediaView)
-                mediaView = [SPKUtils getIvarForObj:overlayView name:"_mediaView"];
-            ((void (*)(id, SEL, id))objc_msgSend)(sectionController, advanceSelector, mediaView);
-        }
-    }
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        SPKForceStoryAutoAdvance = NO;
-    });
-}
-
 // Forward declaration — implemented in StoryMentions.x
 extern void SPKPresentStoryMentionsSheet(UIView *overlayView);
 
@@ -366,48 +204,110 @@ static void SPKMarkCurrentStoryAsSeenFromOverlayWithAdvancePref(UIView *overlayV
         return;
 
     SPKStoryContext *sharedContext = SPKStoryContextFromOverlay(overlayView);
-    if (sharedContext) {
-        if (!sharedContext.markSeenTarget || !sharedContext.sectionController || !sharedContext.media) {
-            SPKNotify(kSPKNotificationStoryMarkSeen, @"Unable to mark story as seen", nil, @"error_filled", SPKNotificationToneError);
-            return;
-        }
-        if (!SPKStoryMarkContextAsSeen(sharedContext)) {
-            SPKNotify(kSPKNotificationStoryMarkSeen, @"Unable to mark story as seen", nil, @"error_filled", SPKNotificationToneError);
-            return;
-        }
-        SPKStoryAdvanceContextIfNeeded(sharedContext, advancePrefKey);
-        SPKNotify(kSPKNotificationStoryMarkSeen, @"Marked story as seen", nil, @"circle_check_filled", SPKNotificationToneSuccess);
-        return;
-    }
-
-    id markTarget = nil;
-    id sectionController = nil;
-    id media = nil;
-    BOOL resolved = SPKResolveStoryContextFromOverlay(overlayView, &markTarget, &sectionController, &media);
-    if (!markTarget || !sectionController || !media) {
+    if (!SPKStoryMarkContextAsSeen(sharedContext)) {
         SPKNotify(kSPKNotificationStoryMarkSeen, @"Unable to mark story as seen", nil, @"error_filled", SPKNotificationToneError);
         return;
     }
-
-    SEL markSelector = NSSelectorFromString(@"fullscreenSectionController:didMarkItemAsSeen:");
-    SPKForcedStorySeenMediaPK = [SPKStoryMediaIdentifier(media) copy];
-    SPKForceMarkStoryAsSeen = YES;
-    @try {
-        ((void (*)(id, SEL, id, id))objc_msgSend)(markTarget, markSelector, sectionController, media);
-    } @finally {
-        SPKForceMarkStoryAsSeen = NO;
-        SPKForcedStorySeenMediaPK = nil;
-    }
-
-    if (resolved) {
-        SPKAdvanceStoryAfterManualSeenIfNeeded(overlayView, advancePrefKey);
-    }
-
+    SPKStoryAdvanceContextIfNeeded(sharedContext, advancePrefKey);
     SPKNotify(kSPKNotificationStoryMarkSeen, @"Marked story as seen", nil, @"circle_check_filled", SPKNotificationToneSuccess);
 }
 
 static void SPKMarkCurrentStoryAsSeenFromOverlay(UIView *overlayView) {
     SPKMarkCurrentStoryAsSeenFromOverlayWithAdvancePref(overlayView, @"stories_advance_on_manual_seen");
+}
+
+static const void *kSPKStorySeenButtonLastIconAssocKey = &kSPKStorySeenButtonLastIconAssocKey;
+
+// Plain eye until toggle mode turns seen receipts on, then crossed out to show
+// that tapping again stops them.
+static void SPKUpdateStorySeenButtonIcon(UIButton *button) {
+    if (!button)
+        return;
+    BOOL crossedOut = SPKStorySeenReceiptsSessionEnabled();
+    NSNumber *lastIcon = objc_getAssociatedObject(button, kSPKStorySeenButtonLastIconAssocKey);
+    if (lastIcon && lastIcon.boolValue == crossedOut)
+        return;
+    objc_setAssociatedObject(button, kSPKStorySeenButtonLastIconAssocKey, @(crossedOut), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    UIImage *image = [SPKAssetUtils instagramIconNamed:(crossedOut ? @"eye_off" : kSPKSeenMessagesBarIconResource) pointSize:24.0];
+    void (^applyImage)(void) = ^{
+        SPKSetSeenButtonImage(button, image, @"Story seen icon updated");
+        // Setting the image resets the tint to SDR white.
+        SPKApplyStorySeenButtonStyle(button);
+    };
+
+    UIImageView *iconView = [button isKindOfClass:SPKChromeButton.class] ? ((SPKChromeButton *)button).iconView : nil;
+    // The first assignment after the button appears is not a state change.
+    if (!lastIcon || !iconView) {
+        applyImage();
+        return;
+    }
+
+    iconView.transform = CGAffineTransformMakeScale(0.78, 0.78);
+    iconView.alpha = 0.65;
+    [UIView transitionWithView:iconView
+                      duration:0.16
+                       options:UIViewAnimationOptionTransitionCrossDissolve |
+                               UIViewAnimationOptionBeginFromCurrentState |
+                               UIViewAnimationOptionAllowAnimatedContent
+                    animations:applyImage
+                    completion:nil];
+    [UIView animateWithDuration:0.34
+                          delay:0.0
+         usingSpringWithDamping:0.70
+          initialSpringVelocity:0.55
+                        options:UIViewAnimationOptionBeginFromCurrentState |
+                                UIViewAnimationOptionAllowUserInteraction
+                     animations:^{
+                         iconView.transform = CGAffineTransformIdentity;
+                         iconView.alpha = 1.0;
+                     }
+                     completion:nil];
+}
+
+static UIViewController *SPKStoryViewerControllerForOverlay(UIView *overlayView) {
+    Class viewerClass = NSClassFromString(@"IGStoryViewerViewController");
+    for (UIResponder *responder = overlayView; responder; responder = responder.nextResponder) {
+        if (viewerClass && [responder isKindOfClass:viewerClass])
+            return (UIViewController *)responder;
+    }
+    return nil;
+}
+
+static void SPKToggleStorySeenReceiptsFromOverlay(UIView *overlayView) {
+    BOOL enable = !SPKStorySeenReceiptsSessionEnabled();
+    __weak UIView *weakOverlay = overlayView;
+    void (^apply)(void) = ^{
+        UIView *overlay = weakOverlay;
+        if (enable) {
+            // The session ends when this viewer disappears.
+            UIViewController *viewer = SPKStoryViewerControllerForOverlay(overlay);
+            if (!viewer) {
+                SPKLog(@"Stories", @"[Sparkle StorySeen] No story viewer found for the seen receipts toggle");
+                return;
+            }
+            SPKStorySetSeenReceiptsSessionViewer(viewer);
+            // Instagram already skipped reporting the story on screen, so it is sent now.
+            SPKStoryContext *context = SPKStoryContextFromOverlay(overlay);
+            if (context && SPKStoryManualSeenAppliesToContext(context) && !SPKStoryMarkContextAsSeen(context)) {
+                SPKLog(@"Stories", @"[Sparkle StorySeen] Seen receipts on, but the current story could not be marked");
+            }
+            SPKNotify(kSPKNotificationStoryMarkSeen, @"Marking stories as seen", @"Until you tap again or leave stories", @"eye", SPKNotificationToneSuccess);
+        } else {
+            SPKStorySetSeenReceiptsSessionViewer(nil);
+            SPKNotify(kSPKNotificationStoryMarkSeen, @"Stories stay unseen", nil, @"eye_off", SPKNotificationToneSuccess);
+        }
+        SPKUpdateStorySeenButtonIcon((UIButton *)[overlay viewWithTag:kSPKStorySeenButtonTag]);
+        [overlay setNeedsLayout];
+    };
+
+    if (enable && [SPKUtils getBoolPref:@"stories_confirm_mark_seen"]) {
+        [SPKUtils showConfirmation:apply
+                             title:@"Mark stories as seen"
+                           message:@"Stories you watch are marked as seen, this one included, until you tap again or leave stories."];
+        return;
+    }
+    apply();
 }
 
 void SPKMarkStoryAsSeenForViewWithAdvancePref(UIView *view, NSString *advancePrefKey) {
@@ -481,6 +381,7 @@ UIView *SPKActiveStoryOverlayForInteractions(void) {
     }
     if (showSeenButton) {
         SPKApplyStorySeenButtonStyle(seenButton);
+        SPKUpdateStorySeenButtonIcon(seenButton);
     }
 
     UIButton *storyActionButton = (UIButton *)[overlayView viewWithTag:kSPKStoriesActionButtonTag];
@@ -546,7 +447,22 @@ UIView *SPKActiveStoryOverlayForInteractions(void) {
 %new - (void)spk_storySeenButtonTapped:(UIButton *)sender {
 (void)sender;
 SPKPlayButtonTappedHaptic();
-SPKMarkCurrentStoryAsSeenFromOverlay((UIView *)self);
+if (SPKStoryEyeButtonTogglesSeenReceipts()) {
+    SPKToggleStorySeenReceiptsFromOverlay((UIView *)self);
+    return;
+}
+if (![SPKUtils getBoolPref:@"stories_confirm_mark_seen"]) {
+    SPKMarkCurrentStoryAsSeenFromOverlay((UIView *)self);
+    return;
+}
+// The viewer can advance or close while the dialog is up, so the overlay is held weakly.
+__weak UIView *weakOverlay = (UIView *)self;
+[SPKUtils
+    showConfirmation:^{
+        SPKMarkCurrentStoryAsSeenFromOverlay(weakOverlay);
+    }
+               title:@"Mark story as seen"
+             message:@"You will appear on its viewer list."];
 }
 
 %new - (void)spk_storySeenButtonLongPressed:(UILongPressGestureRecognizer *)gesture {

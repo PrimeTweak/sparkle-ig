@@ -2,6 +2,7 @@
 
 #import "../../Shared/ActionButton/SPKActionButtonConfiguration.h"
 #import "../../Shared/Stories/SPKStoryContext.h"
+#import "../../Shared/Stories/SPKStoryLocalSeen.h"
 #import "../../Utils.h"
 #import "../SPKSettingsViewController.h"
 #import "../SPKToggleMenu.h"
@@ -24,17 +25,18 @@ static NSArray *SPKStoriesSettingsSections(void);
     [self replaceSections:SPKStoriesSettingsSections()];
 }
 
-- (void)switchChanged:(UISwitch *)sender {
-    SPKSetting *row = [self settingForSender:sender];
-    [super switchChanged:sender];
-    if ([row.defaultsKey isEqualToString:@"stories_manual_seen"]) {
+// The mode flips the user list between excluded and included users and gates
+// rows in other sections.
+- (void)menuChanged:(UICommand *)command {
+    [super menuChanged:command];
+    if ([command.propertyList[@"defaultsKey"] isEqualToString:@"stories_manual_seen_mode"]) {
         [self replaceSections:SPKStoriesSettingsSections()];
     }
 }
 @end
 
 static NSDictionary *SPKStoriesSeenReceiptsSection(void) {
-    BOOL manualSeen = [SPKUtils getBoolPref:@"stories_manual_seen"];
+    BOOL manualSeen = SPKStoryManualSeenEnabled();
     NSString *footer = manualSeen
                            ? @"1. Stories are not marked seen automatically, except users in Excluded Users.\n"
                              @"2. Mark the story as seen when you press like.\n"
@@ -51,7 +53,7 @@ static NSDictionary *SPKStoriesSeenReceiptsSection(void) {
     manualSeenList.userInfo = @{@"accessoryText" : [NSString stringWithFormat:@"%lu", (unsigned long)SPKStoryManualSeenUserList(manualSeen).count]};
 manualSeenList.hiddenProvider = ^BOOL {
     // R5: the chat list only applies while manual seen is on.
-    return ![SPKUtils getBoolPref:@"stories_manual_seen"];
+    return !SPKStoryManualSeenEnabled();
 };
 
     // The auto-seen triggers only do anything while manual seen is on. Keep their
@@ -69,25 +71,52 @@ manualSeenList.hiddenProvider = ^BOOL {
                                  defaultsKey:@"stories_mark_seen_on_reply"],
         ]);
         g.hiddenProvider = ^BOOL {
-            return ![SPKUtils getBoolPref:@"stories_manual_seen"];
+            return !SPKStoryManualSeenEnabled();
         };
         g.searchKeywords = @"mark seen like reply auto";
         g;
     });
+
+    SPKSetting *keepSeenLocally = [SPKSetting switchCellWithTitle:@"Keep seen locally"
+                                                             icon:SPKSettingsIcon(@"story")
+                                                      defaultsKey:@"stories_manual_seen_keep_local"];
+    keepSeenLocally.helpText = @"Watched stories turn grey and move to the end of the tray without sending a seen receipt. The eye button still marks them seen.";
+    keepSeenLocally.searchKeywords = @"local device grey ring tray unseen receipt";
+    keepSeenLocally.hiddenProvider = ^BOOL {
+        return !SPKStoryManualSeenEnabled();
+    };
+    // R5: reveals Seen locally in place.
+    keepSeenLocally.reloadsTableOnSwitchChange = YES;
+
+    SPKSetting *locallySeen = [SPKSetting navigationCellWithTitle:@"Seen locally"
+                                                         subtitle:nil
+                                                             icon:SPKSettingsIcon(@"history")
+                                                   viewController:SPKStoryLocalSeenListViewController()];
+    locallySeen.helpText = @"People whose stories you've seen locally. Swipe someone away, or tap the trash button, to make their stories unseen again.";
+    locallySeen.accessoryTextProvider = ^NSString * {
+        return [NSString stringWithFormat:@"%lu", (unsigned long)SPKStoryLocalSeenUserCount()];
+    };
+    // Kept while records remain, so stories seen locally can still be reset.
+    locallySeen.hiddenProvider = ^BOOL {
+        return !SPKStoryLocalSeenEnabled() && SPKStoryLocalSeenUserCount() == 0;
+    };
 
     return SPKTopicSection(@"Seen receipts", @[
             [SPKSetting switchCellWithTitle:@"Preview without being seen"
                                        icon:SPKSettingsIcon(@"story")
                                 defaultsKey:@"stories_unlock_preview"],
             ({
-            SPKSetting *row = [SPKSetting switchCellWithTitle:@"Manually mark seen"
-                                       icon:SPKSettingsIcon(@"eye")
-                                defaultsKey:@"stories_manual_seen"];
-            row.reloadsTableOnSwitchChange = YES;  // R5: reveals the dependent seen-receipt rows in place.
-            row.helpText = @"Stories stop sending read receipts until the eye button is tapped. Turning this on reveals Mark Seen On\u2026 and the viewer tools.";
+            SPKSetting *row = [SPKSetting menuCellWithTitle:@"Manually mark seen"
+                                                       icon:SPKSettingsIcon(@"eye")
+                                                       menu:SPKStoryManualSeenModeMenu()];
+            row.defaultsKey = @"stories_manual_seen_mode";
+            row.helpText = @"On tap keeps each story unseen until you tap the eye button; Toggle makes the eye button send seen receipts until you tap it again or leave stories. Either mode reveals the options below.";
+            row.searchKeywords = @"manual seen receipts eye button toggle tap";
             row;
         }),
             markSeenGate,
+            keepSeenLocally,
+            locallySeen,
             manualSeenList,
             // Acts on the story viewer list; help text replaces the former
             // numbered footer note.
@@ -122,9 +151,16 @@ static NSArray *SPKStoriesSettingsSections(void) {
             // become the gate's ⓘ — a numbered footer can only point at rows.
             ({
                 SPKSetting *g = SPKToggleMenuRowSetting(@"Advance on…", @"autoscroll", @[
-                    [SPKToggleMenuItem itemWithTitle:@"Eye button"
-                                            iconName:@"eye"
-                                         defaultsKey:@"stories_advance_on_manual_seen"],
+                    ({
+                        SPKToggleMenuItem *item = [SPKToggleMenuItem itemWithTitle:@"Eye button"
+                                                                          iconName:@"eye"
+                                                                       defaultsKey:@"stories_advance_on_manual_seen"];
+                        // A seen receipts toggle has no single story to advance past.
+                        item.hiddenProvider = ^BOOL {
+                            return SPKStoryEyeButtonTogglesSeenReceipts();
+                        };
+                        item;
+                    }),
                     [SPKToggleMenuItem itemWithTitle:@"Like"
                                             iconName:@"heart"
                                          defaultsKey:@"stories_advance_on_like_seen"],
@@ -135,6 +171,27 @@ static NSArray *SPKStoriesSettingsSections(void) {
                 g.helpText = @"Moves to the next story when you press the eye button, like it, or reply.";
                 g.searchKeywords = @"advance auto next story eye button like reply";
                 g;
+            }),
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Playback controls"
+                                                             icon:SPKSettingsIcon(@"playback")
+                                                      defaultsKey:@"stories_playback_controls"];
+                row.helpText = @"Adds a button to video stories for speed, seeking and pause controls. Turning this on reveals Keep speed for.";
+                row.searchKeywords = @"speed seek pause playback rate faster slower";
+                // R5: reveals Keep speed for in place.
+                row.reloadsTableOnSwitchChange = YES;
+                row;
+            }),
+            ({
+                SPKSetting *row = [SPKSetting menuCellWithTitle:@"Keep speed for"
+                                                           icon:SPKSettingsIcon(@"clock")
+                                                           menu:SPKPlaybackSpeedScopeMenu(@"stories_playback_speed_scope")];
+                row.defaultsKey = @"stories_playback_speed_scope";
+                row.helpText = @"Whether a picked speed applies to that story, until you close stories, or to every story. The playback panel can change it too.";
+                row.hiddenProvider = ^BOOL {
+                    return ![SPKUtils getBoolPref:@"stories_playback_controls"];
+                };
+                row;
             }),
             [SPKSetting switchCellWithTitle:@"Hide trending prompts"
                                        icon:SPKSettingsIcon(@"arrow_up_right")
@@ -147,9 +204,33 @@ static NSArray *SPKStoriesSettingsSections(void) {
                 row.searchKeywords = @"highlights recent resurfaced tray hide";
                 row;
             }),
-            [SPKSetting switchCellWithTitle:@"Show story mentions"
-                                       icon:SPKSettingsIcon(@"mention")
-                                defaultsKey:@"stories_mentions_btn"],
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Hide audio unavailable message"
+                                                             icon:SPKSettingsIcon(@"error")
+                                                      defaultsKey:@"stories_hide_audio_unavailable_toast"];
+                row.helpText = @"Hides Instagram's message when a story's audio can't be played in your region.";
+                row.searchKeywords = @"audio unavailable toast region music sound";
+                row;
+            }),
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Show story mentions"
+                                                             icon:SPKSettingsIcon(@"mention")
+                                                      defaultsKey:@"stories_mentions_btn"];
+                row.helpText = @"Adds a button above the story bar that lists every mentioned account. Turning this on reveals Show mention count.";
+                // R5: reveals the count badge row in place.
+                row.reloadsTableOnSwitchChange = YES;
+                row;
+            }),
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Show mention count"
+                                                             icon:SPKSettingsIcon(@"users")
+                                                      defaultsKey:@"stories_mentions_count_badge"];
+                row.helpText = @"Shows the number of mentioned accounts on the mentions button.";
+                row.hiddenProvider = ^BOOL {
+                    return ![SPKUtils getBoolPref:@"stories_mentions_btn"];
+                };
+                row;
+            }),
             [SPKSetting switchCellWithTitle:@"Show poll vote counts"
                                        icon:SPKSettingsIcon(@"poll")
                                 defaultsKey:@"stories_poll_vote_counts"],
@@ -211,6 +292,9 @@ static NSArray *SPKStoriesSettingsSections(void) {
                 [SPKToggleMenuItem itemWithTitle:@"Sticker interaction"
                                         iconName:@"sticker"
                                      defaultsKey:@"stories_confirm_sticker"],
+                [SPKToggleMenuItem itemWithTitle:@"Mark seen"
+                                        iconName:@"eye"
+                                     defaultsKey:@"stories_confirm_mark_seen"],
             ])
         ],
                         nil)

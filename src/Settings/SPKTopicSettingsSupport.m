@@ -5,6 +5,7 @@
 #import "SPKBulkActionMenuEditViewController.h"
 #import "SPKEditActionsListViewController.h"
 #import "SPKPreferences.h"
+#import "SPKSettingsViewController.h"
 
 #import "../AssetUtils.h"
 #import "../Shared/AutoSave/SPKAutoSave.h"
@@ -13,6 +14,25 @@
 #import "../Utils.h"
 
 CGFloat const SPKSettingsCellIconPointSize = 24.0;
+
+UIViewController *SPKSettingsTopPresenter(void) {
+    UIViewController *presenter = UIApplication.sharedApplication.keyWindow.rootViewController;
+    while (presenter.presentedViewController)
+        presenter = presenter.presentedViewController;
+    return presenter;
+}
+
+void SPKSettingsReloadPresenter(UIViewController *presenter) {
+    SPKSettingsViewController *settingsVC = nil;
+    if ([presenter isKindOfClass:SPKSettingsViewController.class]) {
+        settingsVC = (SPKSettingsViewController *)presenter;
+    } else if ([presenter isKindOfClass:UINavigationController.class]) {
+        UIViewController *top = ((UINavigationController *)presenter).topViewController;
+        if ([top isKindOfClass:SPKSettingsViewController.class])
+            settingsVC = (SPKSettingsViewController *)top;
+    }
+    [settingsVC.tableView reloadData];
+}
 
 NSDictionary *SPKTopicSection(NSString *header, NSArray *rows, NSString *footer) {
     NSMutableDictionary *section = [@{
@@ -285,6 +305,14 @@ UIMenu *SPKSeenButtonPositionMenu(void) {
     ]];
 }
 
+UIMenu *SPKHiddenChatsRevealResetMenu(void) {
+    return [UIMenu menuWithChildren:@[
+        SPKMenuCommand(@"On leaving the inbox", nil, nil, @"msgs_hidden_chats_reveal_reset", @"leave_inbox", NO),
+        SPKMenuCommand(@"On leaving the app", nil, nil, @"msgs_hidden_chats_reveal_reset", @"background", NO),
+        SPKMenuCommand(@"Manually", nil, nil, @"msgs_hidden_chats_reveal_reset", @"never", NO)
+    ]];
+}
+
 UIMenu *SPKLastActiveFormatMenu(void) {
     return [UIMenu menuWithChildren:@[
         SPKMenuCommand(@"Off", nil, nil, @"msgs_last_active_format", @"off", NO),
@@ -293,37 +321,6 @@ UIMenu *SPKLastActiveFormatMenu(void) {
     ]];
 }
 
-
-UIMenu *SPKLaunchTabMenu(void) {
-    return [UIMenu menuWithChildren:@[
-        SPKMenuCommand(@"Default", nil, nil, @"interface_launch_tab", @"default", YES),
-        [UIMenu menuWithTitle:@""
-                        image:nil
-                   identifier:nil
-                      options:UIMenuOptionsDisplayInline
-                     children:@[
-                         SPKMenuCommand(@"Feed", @"home", nil, @"interface_launch_tab", @"feed", YES),
-                         SPKMenuCommand(@"Reels", @"reels", nil, @"interface_launch_tab", @"reels", YES),
-                         SPKMenuCommand(@"Messages", @"messages", nil, @"interface_launch_tab", @"inbox", YES),
-                         SPKMenuCommand(@"Explore", @"search", nil, @"interface_launch_tab", @"explore", YES),
-                         SPKMenuCommand(@"Profile", @"user_circle", nil, @"interface_launch_tab", @"profile", YES)
-                     ]]
-    ]];
-}
-
-UIMenu *SPKSwipeBetweenTabsMenu(void) {
-    return [UIMenu menuWithChildren:@[
-        SPKMenuCommand(@"Default", nil, nil, @"interface_swipe_tabs", @"default", YES),
-        [UIMenu menuWithTitle:@""
-                        image:nil
-                   identifier:nil
-                      options:UIMenuOptionsDisplayInline
-                     children:@[
-                         SPKMenuCommand(@"Enabled", nil, nil, @"interface_swipe_tabs", @"enabled", YES),
-                         SPKMenuCommand(@"Disabled", nil, nil, @"interface_swipe_tabs", @"disabled", YES)
-                     ]]
-    ]];
-}
 
 UIMenu *SPKLiquidGlassTabBarStateMenu(void) {
     return [UIMenu menuWithChildren:@[
@@ -336,6 +333,40 @@ UIMenu *SPKLiquidGlassTabBarStateMenu(void) {
                          SPKMenuCommand(@"Fixed", nil, nil, kSPKPrefInterfaceLiquidGlassTabBarMode, @"fixed", YES),
                          SPKMenuCommand(@"Hide on scroll", nil, nil, kSPKPrefInterfaceLiquidGlassTabBarMode, @"hide", YES)
                      ]]
+    ]];
+}
+
+// Only Off needs a restart: Instagram hides edge effects once while it sets screens
+// up. The other styles apply to open screens live.
+UIMenu *SPKScrollEdgeStyleMenu(void) {
+    return [UIMenu menuWithChildren:@[
+        SPKMenuCommand(@"Off", nil, nil, kSPKPrefInterfaceScrollEdgeStyle, @"off", YES),
+        [UIMenu menuWithTitle:@""
+                        image:nil
+                   identifier:nil
+                      options:UIMenuOptionsDisplayInline
+                     children:@[
+                         SPKMenuCommand(@"Default", nil, nil, kSPKPrefInterfaceScrollEdgeStyle, @"default", NO),
+                         SPKMenuCommand(@"Soft", nil, nil, kSPKPrefInterfaceScrollEdgeStyle, @"soft", NO),
+                         SPKMenuCommand(@"Hard", nil, nil, kSPKPrefInterfaceScrollEdgeStyle, @"hard", NO)
+                     ]]
+    ]];
+}
+
+UIMenu *SPKStoryManualSeenModeMenu(void) {
+    static NSString *const kSPKStoryManualSeenModeKey = @"stories_manual_seen_mode";
+    return [UIMenu menuWithChildren:@[
+        SPKMenuCommand(@"Off", nil, nil, kSPKStoryManualSeenModeKey, @"off", NO),
+        SPKMenuCommand(@"On tap", nil, nil, kSPKStoryManualSeenModeKey, @"tap", NO),
+        SPKMenuCommand(@"Toggle", nil, nil, kSPKStoryManualSeenModeKey, @"toggle", NO)
+    ]];
+}
+
+UIMenu *SPKPlaybackSpeedScopeMenu(NSString *defaultsKey) {
+    return [UIMenu menuWithChildren:@[
+        SPKMenuCommand(@"This video", nil, nil, defaultsKey, @"video", NO),
+        SPKMenuCommand(@"This session", nil, nil, defaultsKey, @"session", NO),
+        SPKMenuCommand(@"Always", nil, nil, defaultsKey, @"always", NO)
     ]];
 }
 
@@ -358,12 +389,34 @@ UIMenu *SPKCacheAutoClearMenu(void) {
     ]];
 }
 
+UIMenu *SPKLinkOpeningModeMenu(void) {
+    return [UIMenu menuWithChildren:@[
+        SPKMenuCommand(@"Default", nil, nil, @"general_link_opening_mode", @"default", NO),
+        [UIMenu menuWithTitle:@""
+                        image:nil
+                   identifier:nil
+                      options:UIMenuOptionsDisplayInline
+                     children:@[
+                         SPKMenuCommand(@"In-app Safari", nil, nil, @"general_link_opening_mode", @"in_app", NO),
+                         SPKMenuCommand(@"Safari", nil, nil, @"general_link_opening_mode", @"safari", NO),
+                         SPKMenuCommand(@"Always ask", nil, nil, @"general_link_opening_mode", @"ask", NO)
+                     ]]
+    ]];
+}
+
 UIMenu *SPKNotificationProgressSubtitleStyleMenu(void) {
     return [UIMenu menuWithChildren:@[
         SPKMenuCommand(@"Both", nil, nil, kSPKNotificationProgressSubtitleStyleKey, @"both", NO),
         SPKMenuCommand(@"Percent", nil, nil, kSPKNotificationProgressSubtitleStyleKey, @"percent", NO),
         SPKMenuCommand(@"Bytes", nil, nil, kSPKNotificationProgressSubtitleStyleKey, @"bytes", NO),
         SPKMenuCommand(@"Off", nil, nil, kSPKNotificationProgressSubtitleStyleKey, @"off", NO)
+    ]];
+}
+
+UIMenu *SPKNotificationStyleMenu(void) {
+    return [UIMenu menuWithChildren:@[
+        SPKMenuCommand(@"Sparkle pill", nil, nil, kSPKNotificationStyleKey, @"pill", NO),
+        SPKMenuCommand(@"Instagram", nil, nil, kSPKNotificationStyleKey, @"instagram", NO)
     ]];
 }
 

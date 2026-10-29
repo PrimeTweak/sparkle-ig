@@ -1,5 +1,6 @@
 #import "../../InstagramHeaders.h"
 #import "../../Shared/Stories/SPKStoryContext.h"
+#import "../../Shared/Stories/SPKStoryLocalSeen.h"
 #import "../../Tweak.h"
 #import "../../Utils.h"
 
@@ -11,20 +12,31 @@ static inline BOOL SPKShouldBlockStoryAutoAdvance(void) {
 
 %hook IGStoryViewerViewController
 - (void)fullscreenSectionController:(id)arg1 didMarkItemAsSeen:(id)arg2 {
-    (void)arg1;
     BOOL forcedStoryMatches = SPKForceMarkStoryAsSeen;
     if (forcedStoryMatches && SPKForcedStorySeenMediaPK.length > 0) {
         NSString *mediaPK = SPKStoryMediaIdentifier(arg2);
         forcedStoryMatches = [mediaPK isEqualToString:SPKForcedStorySeenMediaPK];
     }
 
-    BOOL shouldBlockSeen = SPKStoryManualSeenAppliesToContext(SPKStoryContextFromMedia(arg2));
+    BOOL shouldBlockSeen = !SPKStorySeenReceiptsSessionEnabled() &&
+                           SPKStoryManualSeenAppliesToContext(SPKStoryContextFromMedia(arg2));
     if (shouldBlockSeen && !forcedStoryMatches) {
         SPKLog(@"General", @"[Sparkle] Prevented automatic story seen marking");
+        // Keep seen locally: the story still turns seen on this device, without
+        // the receipt Instagram's own mark would queue.
+        if (SPKStoryLocalSeenEnabled())
+            SPKStoryLocalSeenMarkItem(self, arg1, arg2);
         return;
     }
 
     %orig;
+    if (shouldBlockSeen)
+        SPKStoryLocalSeenNoteItemSent(self, arg1, arg2);
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    %orig(animated);
+    SPKStoryEndSeenReceiptsSessionForViewer((UIViewController *)self);
 }
 %end
 
@@ -49,7 +61,7 @@ static inline BOOL SPKShouldBlockStoryAutoAdvance(void) {
 %end
 
 void SPKInstallDisableStorySeenHooksIfNeeded(void) {
-    if (![SPKUtils getBoolPref:@"stories_manual_seen"] &&
+    if (!SPKStoryManualSeenEnabled() &&
         SPKStoryManualSeenUserList(NO).count == 0 &&
         ![SPKUtils getBoolPref:@"stories_stop_auto_advance"]) {
         return;

@@ -1,9 +1,12 @@
 #import "SPKGeneralSettingsProvider.h"
 
+#import <AVKit/AVKit.h>
+
 #import "../../AssetUtils.h"
 #import "../../Shared/Account/SPKAccountManager.h"
 #import "../../Features/Feed/HeaderActionButton.h"
 #import "../../Shared/ActionButton/ActionButtonCore.h"
+#import "../../Shared/MediaPreview/SPKFullScreenImageViewController.h"
 #import "../../Utils.h"
 #import "../SPKActionSectionIconPickerViewController.h"
 #import "../SPKToggleMenu.h"
@@ -145,6 +148,19 @@ static NSString *SPKGeneralHiddenCountAccessory(NSArray<NSDictionary<NSString *,
     holdSendCopyLink.helpText = @"Long-press the send or share button to get the post link.";
     holdSendCopyLink.searchKeywords = @"long press share button post link hold send";
 
+    SPKSetting *textLinks = [SPKSetting switchCellWithTitle:@"Detect links in text"
+                                                       icon:SPKSettingsIcon(@"web")
+                                                defaultsKey:@"general_tappable_text_links"
+                                            requiresRestart:YES];
+    textLinks.helpText = @"Makes web links in captions and comments tappable. Nothing is loaded until the tap.";
+    textLinks.searchKeywords = @"url http https tappable caption comment";
+
+    SPKSetting *linkOpening = [SPKSetting menuCellWithTitle:@"Open links in"
+                                                       icon:SPKSettingsIcon(@"external_link")
+                                                       menu:SPKLinkOpeningModeMenu()];
+    linkOpening.helpText = @"Default keeps Instagram's browser; links detected in text open in In-app Safari. Other choices remove tracking, and Meta pages and sign-ins always stay in Instagram's browser.";
+    linkOpening.searchKeywords = @"browser safari in-app tracking redirect external";
+
     SPKSetting *pinRecipients = [SPKSetting switchCellWithTitle:@"Pin recipients"
                                                            icon:SPKSettingsIcon(@"pin")
                                                     defaultsKey:@"general_share_sheet_pins"];
@@ -160,6 +176,24 @@ static NSString *SPKGeneralHiddenCountAccessory(NSArray<NSDictionary<NSString *,
                                                            icon:SPKSettingsIcon(@"info")
                                                     defaultsKey:@"general_preview_show_metadata"];
     showMediaInfo.searchKeywords = @"author date overlay metadata";
+
+    SPKSetting *selectText = [SPKSetting switchCellWithTitle:@"Select text in photos"
+                                                        icon:SPKSettingsIcon(@"text")
+                                                 defaultsKey:@"general_preview_live_text"];
+    selectText.helpText = @"Recognizes text in the expanded photo and adds a button to select and copy it.";
+    selectText.searchKeywords = @"live text copy ocr recognize";
+    selectText.hiddenProvider = ^BOOL {
+        return !SPKLiveTextIsSupported();
+    };
+
+    SPKSetting *pictureInPicture = [SPKSetting switchCellWithTitle:@"Picture in Picture"
+                                                              icon:SPKSettingsSystemIcon(@"pip", SPKSettingsCellIconPointSize, UIImageSymbolWeightSemibold)
+                                                       defaultsKey:@"general_preview_allow_pip"];
+    pictureInPicture.helpText = @"Expanded videos keep playing in a floating window when you leave the viewer or the app.";
+    pictureInPicture.searchKeywords = @"pip floating window video background";
+    pictureInPicture.hiddenProvider = ^BOOL {
+        return ![AVPictureInPictureController isPictureInPictureSupported];
+    };
 
     SPKSetting *showDateInMenu = [SPKSetting switchCellWithTitle:@"Show date in menu"
                                                             icon:SPKSettingsIcon(@"calendar")
@@ -194,8 +228,12 @@ static NSString *SPKGeneralHiddenCountAccessory(NSArray<NSDictionary<NSString *,
             copyText,
             stripTracking,
             holdSendCopyLink,
+            textLinks,
+            linkOpening,
             pinRecipients,
             showMediaInfo,
+            selectText,
+            pictureInPicture,
             showDateInMenu],
                         nil),
         // Kept as a footer: it describes the section, not any one row, so it has

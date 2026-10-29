@@ -1,5 +1,6 @@
 #import "../../InstagramHeaders.h"
 #import "../../Utils.h"
+#import "ReelsAutoScrollDefault.h"
 #import <objc/runtime.h>
 
 // Puts the reels auto scroll toggle into a chosen state once per controller, so it
@@ -8,9 +9,7 @@
 
 static const void *kSPKAutoScrollAppliedModeKey = &kSPKAutoScrollAppliedModeKey;
 
-// The mode actually in force: "default", "on" or "off". One reel at a time forces
-// "off" without touching the saved choice.
-static NSString *SPKReelsAutoScrollEffectiveMode(void) {
+NSString *SPKReelsAutoScrollEffectiveMode(void) {
     if ([SPKUtils getBoolPref:@"reels_disable_scrolling"])
         return @"off";
     return [SPKUtils getStringPref:@"reels_auto_scroll_default"] ?: @"default";

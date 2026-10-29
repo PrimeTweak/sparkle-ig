@@ -7,11 +7,13 @@
 #import "../../Shared/Gallery/SPKGalleryFile.h"
 #import "../../Shared/Gallery/SPKGalleryOriginController.h"
 #import "../../Shared/Gallery/SPKGallerySaveMetadata.h"
+#import "../../Shared/Giphy/SPKGiphyMetadata.h"
 #import "../../Shared/UI/SPKNotificationCenter.h"
 #import "../../Utils.h"
 
 static NSString *const kSPKCommentCopyTextPref = @"general_comments_copy_text";
 static NSString *const kSPKCommentMediaActionsPref = @"general_comments_media_actions";
+static NSString *const kSPKCommentGIFTitlePref = @"general_comments_gif_title";
 
 static id SPKCommentObjectForSelector(id object, NSString *selectorName) {
     if (!object || selectorName.length == 0)
@@ -163,6 +165,44 @@ static UIAction *SPKCommentAction(NSString *title, NSString *iconName, void (^ha
                              }];
 }
 
+// The GIF's name with its channel as subtitle; tapping copies the name.
+static UIAction *SPKCommentGIFTitleAction(SPKGiphyMetadata *metadata) {
+    UIAction *action = SPKCommentAction(metadata.title, @"info", ^{
+        UIPasteboard.generalPasteboard.string = metadata.title;
+        SPKNotify(kSPKNotificationCopyGIFTitle, @"GIF title copied", nil, @"copy_filled", SPKNotificationToneSuccess);
+    });
+    if (metadata.author.length > 0)
+        action.subtitle = [@"by " stringByAppendingString:metadata.author];
+    return action;
+}
+
+static UIAction *SPKCommentGIFTitleUnavailableAction(void) {
+    UIAction *action = SPKCommentAction(@"Title unavailable", @"info", nil);
+    action.attributes = UIMenuElementAttributesDisabled;
+    return action;
+}
+
+// Resolved only once the menu opens: the lookup asks giphy.com, so it stays
+// tied to that deliberate action rather than to GIFs scrolling past.
+static NSArray<UIMenuElement *> *SPKCommentGIFTitleElements(NSString *gifID) {
+    if (gifID.length == 0 || ![SPKUtils getBoolPref:kSPKCommentGIFTitlePref])
+        return @[];
+
+    SPKGiphyMetadata *cached = [SPKGiphyMetadataResolver cachedMetadataForGifMediaId:gifID];
+    if (cached)
+        return @[ SPKCommentGIFTitleAction(cached) ];
+
+    UIDeferredMenuElement *element = [UIDeferredMenuElement
+        elementWithUncachedProvider:^(void (^completion)(NSArray<UIMenuElement *> *elements)) {
+            [SPKGiphyMetadataResolver resolveMetadataForGifMediaId:gifID
+                                                        completion:^(SPKGiphyMetadata *metadata) {
+                                                            completion(@[ metadata ? SPKCommentGIFTitleAction(metadata)
+                                                                                   : SPKCommentGIFTitleUnavailableAction() ]);
+                                                        }];
+        }];
+    return @[ element ];
+}
+
 static NSArray<UIMenuElement *> *SPKCommentMediaActionItems(id comment, NSURL *url, NSString *extension, UIImage *localImage, NSString *mediaID, NSString *copyLinkTitle, NSString *linkURLString, NSString *copyLinkToastMessage) {
     SPKGallerySaveMetadata *metadata = SPKCommentMediaMetadata(comment, mediaID, url.absoluteString);
     void (^performDownload)(SPKDownloadDestination) = ^(SPKDownloadDestination destination) {
@@ -224,8 +264,11 @@ static id SPKCommentContextMenu(id self, SEL _cmd, id collectionView, id indexPa
         offersPhotoActions = mediaActionsEnabled && (isPhotoComment || photoURLString.length > 0 || photoLocalImage != nil);
     }
 
+    // Independent of the media actions toggle.
+    NSArray<UIMenuElement *> *gifTitleElements = SPKCommentGIFTitleElements(gifID);
+
     BOOL offersCopyText = text.length > 0 && [SPKUtils getBoolPref:kSPKCommentCopyTextPref];
-    if (!offersCopyText && !offersGIFActions && !offersPhotoActions)
+    if (!offersCopyText && !offersGIFActions && !offersPhotoActions && gifTitleElements.count == 0)
         return configuration;
 
     UIContextMenuActionProvider originalProvider = [configuration valueForKey:@"actionProvider"];
@@ -234,6 +277,8 @@ static id SPKCommentContextMenu(id self, SEL _cmd, id collectionView, id indexPa
     UIContextMenuActionProvider actionProvider = ^UIMenu *(NSArray<UIMenuElement *> *suggestedActions) {
         UIMenu *baseMenu = originalProvider ? originalProvider(suggestedActions) : [UIMenu menuWithChildren:suggestedActions];
         NSMutableArray<UIMenuElement *> *extraActions = [NSMutableArray array];
+
+        [extraActions addObjectsFromArray:gifTitleElements];
 
         if (offersCopyText) {
             [extraActions addObject:SPKCommentAction(@"Copy Comment", @"copy", ^{
@@ -282,7 +327,8 @@ static id SPKCommentContextMenu(id self, SEL _cmd, id collectionView, id indexPa
 
 extern "C" void SPKInstallCommentActionsHooksIfEnabled(void) {
     if (![SPKUtils getBoolPref:kSPKCommentCopyTextPref] &&
-        ![SPKUtils getBoolPref:kSPKCommentMediaActionsPref]) {
+        ![SPKUtils getBoolPref:kSPKCommentMediaActionsPref] &&
+        ![SPKUtils getBoolPref:kSPKCommentGIFTitlePref]) {
         return;
     }
 

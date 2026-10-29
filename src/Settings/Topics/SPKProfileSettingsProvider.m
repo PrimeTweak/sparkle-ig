@@ -196,6 +196,17 @@ static UIMenu *SPKFollowIndicatorModeMenu(void) {
             })],
                         @"1. Long press a profile picture to open it expanded.\n"
                         @"2. Following Indicator shows whether a profile follows you back, under their stats. Text or Icon; it's Instagram's native gray unless you turn on Colorful Indicator for green/red."),
+        SPKTopicSection(@"Tabs", @[
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Square grid"
+                                                             icon:SPKSettingsIcon(@"grid_square")
+                                                      defaultsKey:@"profile_square_grid"];
+                row.helpText = @"Shows the posts and tagged grids as squares instead of the taller 3:4 layout, with a square grid tab icon. Reopen a profile to apply.";
+                row.searchKeywords = @"square grid tiles posts tagged 3:4 ratio";
+                row;
+            })
+        ],
+                        nil),
         // Convention v1.2 gate row — see SPKToggleMenu.h.
         SPKTopicSection(@"", @[
             SPKActionButtonRowSetting(@"profile_action_btn",

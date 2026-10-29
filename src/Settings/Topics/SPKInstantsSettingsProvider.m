@@ -33,6 +33,39 @@ static NSArray *SPKInstantsSettingsSections(void) {
         // does, so the two sections become one.
         SPKTopicSection(@"Instants", @[
             ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Hide Instants in inbox"
+                                                             icon:SPKSettingsIcon(@"circle_off")
+                                                      defaultsKey:@"instants_hide_in_inbox"];
+                row.helpText = @"Keeps the Instants stack out of your inbox, like Instagram's own setting. While on, Instants can't be opened.";
+                row.searchKeywords = @"inbox stack card hide instants";
+                // Detaches a stack already mounted in the inbox now.
+                row.switchChangeHandler = ^(BOOL isOn) {
+                    SPKPreferenceSetObject(@(isOn), @"instants_hide_in_inbox");
+                    [[NSNotificationCenter defaultCenter] postNotificationName:@"SPKInstantsHideInInboxDidChangeNotification" object:nil];
+                };
+                row;
+            }),
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Manually mark seen"
+                                                             icon:SPKSettingsIcon(@"eye")
+                                                      defaultsKey:@"instants_manual_seen"];
+                row.helpText = @"Instants stay unseen as you watch, and an eye button in the viewer marks one as seen. Turning this on reveals Advance on eye button.";
+                row.searchKeywords = @"seen receipts unseen eye";
+                // R5: reveals Advance on eye button in place.
+                row.reloadsTableOnSwitchChange = YES;
+                row;
+            }),
+            ({
+                SPKSetting *row = [SPKSetting switchCellWithTitle:@"Advance on eye button"
+                                                             icon:SPKSettingsIcon(@"autoscroll")
+                                                      defaultsKey:@"instants_advance_on_manual_seen"];
+                row.helpText = @"Moves to the next Instant after the eye button marks one as seen.";
+                row.hiddenProvider = ^BOOL {
+                    return ![SPKUtils getBoolPref:@"instants_manual_seen"];
+                };
+                row;
+            }),
+            ({
                 SPKSetting *row = [SPKSetting switchCellWithTitle:@"Disable screenshot detection"
                                        icon:SPKSettingsIcon(@"warning")
                                 defaultsKey:@"instants_allow_screenshot"];
@@ -82,9 +115,7 @@ static NSArray *SPKInstantsSettingsSections(void) {
             })
         ],
                         nil),
-        // Convention v1.2 gate row — see SPKToggleMenu.h. "Instants ›
-        // Confirmations › Capture": both dropped words sit right above.
-        // Capture keeps its disabled state (feature suspended).
+        // Convention v1.2 gate row — see SPKToggleMenu.h.
         SPKTopicSection(@"", @[
             SPKActionButtonRowSetting(kSPKInstantsActionButtonEnabledKey,
                                       @"Choose what tapping the action button does. Long press opens the full menu.",
@@ -96,11 +127,23 @@ static NSArray *SPKInstantsSettingsSections(void) {
                 SPKActionButtonConfigurationNavigationSetting(SPKActionButtonSourceInstants, @"Instants", SPKActionButtonSupportedActionsForSource(SPKActionButtonSourceInstants), SPKActionButtonDefaultSectionsForSource(SPKActionButtonSourceInstants))
         
                                       ]),
-            SPKToggleMenuRowSetting(@"Confirmations", @"circle_check", @[
-                [SPKToggleMenuItem itemWithTitle:@"Reaction"
-                                        iconName:@"reactions"
-                                     defaultsKey:@"instants_confirm_reaction"],
-            ])
+            ({
+                SPKToggleMenuItem *video = [SPKToggleMenuItem itemWithTitle:@"Video"
+                                                                   iconName:@"instants_burst"
+                                                                defaultsKey:@"instants_confirm_capture"];
+                // The camera re-reads its hardware button state live.
+                video.changeHandler = ^(BOOL isOn) {
+                    [[NSNotificationCenter defaultCenter] postNotificationName:@"SPKQuickSnapCreationPrefChangedNotification" object:nil];
+                };
+                SPKSetting *g = SPKToggleMenuRowSetting(@"Confirmations", @"circle_check", @[
+                    [SPKToggleMenuItem itemWithTitle:@"Reaction"
+                                            iconName:@"reactions"
+                                         defaultsKey:@"instants_confirm_reaction"],
+                    video,
+                ]);
+                g.helpText = @"Video asks before a recorded video Instant is sent; photo Instants are not covered.";
+                g;
+            })
         ],
                         nil),
     ];

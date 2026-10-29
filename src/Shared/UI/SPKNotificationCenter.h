@@ -38,6 +38,7 @@ FOUNDATION_EXPORT NSString *const kSPKNotificationAutoSavePending;
 FOUNDATION_EXPORT NSString *const kSPKNotificationDirectVisualMarkSeen;
 FOUNDATION_EXPORT NSString *const kSPKNotificationThreadMessagesMarkSeen;
 FOUNDATION_EXPORT NSString *const kSPKNotificationDirectThreadSeenRule;
+FOUNDATION_EXPORT NSString *const kSPKNotificationDirectHiddenChat;
 FOUNDATION_EXPORT NSString *const kSPKNotificationDirectAutoSave;
 FOUNDATION_EXPORT NSString *const kSPKNotificationDirectAutoSaveThreadRule;
 FOUNDATION_EXPORT NSString *const kSPKNotificationUnsentMessage;
@@ -46,6 +47,7 @@ FOUNDATION_EXPORT NSString *const kSPKNotificationInstantsCaptureBlocked;
 FOUNDATION_EXPORT NSString *const kSPKNotificationInstantsUpload;
 FOUNDATION_EXPORT NSString *const kSPKNotificationInstantsAutoSave;
 FOUNDATION_EXPORT NSString *const kSPKNotificationInstantsAutoSaveUserRule;
+FOUNDATION_EXPORT NSString *const kSPKNotificationInstantsMarkSeen;
 
 FOUNDATION_EXPORT NSString *const kSPKNotificationProfileCopyInfo;
 FOUNDATION_EXPORT NSString *const kSPKNotificationProfileAnalyzerComplete;
@@ -71,6 +73,7 @@ FOUNDATION_EXPORT NSString *const kSPKNotificationSettingsImport;
 FOUNDATION_EXPORT NSString *const kSPKNotificationSettingsClearCache;
 FOUNDATION_EXPORT NSString *const kSPKNotificationCopyDescription;
 FOUNDATION_EXPORT NSString *const kSPKNotificationCopyNoteText;
+FOUNDATION_EXPORT NSString *const kSPKNotificationFakeLocation;
 FOUNDATION_EXPORT NSString *const kSPKNotificationShareLongPressCopyLink;
 FOUNDATION_EXPORT NSString *const kSPKNotificationShareSheetPin;
 FOUNDATION_EXPORT NSString *const kSPKNotificationCopyComment;
@@ -90,6 +93,7 @@ FOUNDATION_EXPORT NSString *const kSPKNotificationHapticsEnabledKey;
 FOUNDATION_EXPORT NSString *const kSPKNotificationPillLiquidGlassEnabledKey;
 FOUNDATION_EXPORT NSString *const kSPKNotificationProgressSubtitleStyleKey;
 FOUNDATION_EXPORT NSString *const kSPKNotificationPillPositionKey;
+FOUNDATION_EXPORT NSString *const kSPKNotificationStyleKey;
 
 #ifdef __cplusplus
 extern "C" {
@@ -103,6 +107,14 @@ NSArray<NSDictionary *> *SPKNotificationPreferenceSections(void);
 NSDictionary<NSString *, id> *SPKNotificationDefaultPreferences(void);
 BOOL SPKNotificationIsEnabled(NSString *identifier);
 NSTimeInterval SPKNotificationPillDuration(void);
+// Notifications drawn as Instagram's own toast instead of the Sparkle pill. Read
+// when a notification is created, so a change applies to the next one.
+BOOL SPKNotificationUsesInstagramStyle(void);
+// The Instagram toast draws its glyph larger than the pill.
+static CGFloat const kSPKNotificationInstagramIconSize = 24.0;
+// The pill sets filled glyphs on a coloured badge; the Instagram toast has no
+// badge and takes Instagram's outline variant of the same glyph.
+UIImage *_Nullable SPKNotificationIconNamed(NSString *_Nullable iconResource, BOOL instagramStyle);
 void SPKNotificationTriggerHaptic(NSString *identifier, SPKNotificationTone tone);
 SPKNotificationTone SPKNotificationToneForIconResource(NSString *_Nullable iconResource);
 

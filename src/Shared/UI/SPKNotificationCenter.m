@@ -5,6 +5,7 @@
 #import "../AutoSave/SPKAutoSaveFilter.h"
 #import "../Instants/SPKInstantsAutoSave.h"
 #import "../Messages/SPKDirectAutoSave.h"
+#import "../Messages/SPKDirectHiddenChats.h"
 #import "../Messages/SPKDirectSeenContext.h"
 #import "../Stories/SPKStoryAutoSave.h"
 #import "../Stories/SPKStoryContext.h"
@@ -60,6 +61,7 @@ SPK_NOTIF_CONST(kSPKNotificationAutoSavePending, "auto_save_pending");
 SPK_NOTIF_CONST(kSPKNotificationDirectVisualMarkSeen, "direct_visual_mark_seen");
 SPK_NOTIF_CONST(kSPKNotificationThreadMessagesMarkSeen, "thread_messages_mark_seen");
 SPK_NOTIF_CONST(kSPKNotificationDirectThreadSeenRule, "direct_thread_seen_rule");
+SPK_NOTIF_CONST(kSPKNotificationDirectHiddenChat, "direct_hidden_chat");
 SPK_NOTIF_CONST(kSPKNotificationDirectAutoSave, "direct_auto_save");
 SPK_NOTIF_CONST(kSPKNotificationDirectAutoSaveThreadRule, "toggle_direct_auto_save_thread_rule");
 SPK_NOTIF_CONST(kSPKNotificationUnsentMessage, "unsent_message");
@@ -68,6 +70,7 @@ SPK_NOTIF_CONST(kSPKNotificationInstantsCaptureBlocked, "instants_capture_blocke
 SPK_NOTIF_CONST(kSPKNotificationInstantsUpload, "instants_upload");
 SPK_NOTIF_CONST(kSPKNotificationInstantsAutoSave, "instants_auto_save");
 SPK_NOTIF_CONST(kSPKNotificationInstantsAutoSaveUserRule, "toggle_instants_auto_save_user_rule");
+SPK_NOTIF_CONST(kSPKNotificationInstantsMarkSeen, "instants_mark_seen");
 
 SPK_NOTIF_CONST(kSPKNotificationProfileCopyInfo, "profile_copy_info");
 SPK_NOTIF_CONST(kSPKNotificationProfileAnalyzerComplete, "profile_analyzer_complete");
@@ -93,6 +96,7 @@ SPK_NOTIF_CONST(kSPKNotificationSettingsImport, "settings_import");
 SPK_NOTIF_CONST(kSPKNotificationSettingsClearCache, "settings_clear_cache");
 SPK_NOTIF_CONST(kSPKNotificationCopyDescription, "copy_description");
 SPK_NOTIF_CONST(kSPKNotificationCopyNoteText, "copy_note_text");
+SPK_NOTIF_CONST(kSPKNotificationFakeLocation, "fake_location");
 SPK_NOTIF_CONST(kSPKNotificationShareLongPressCopyLink, "share_long_press_copy_link");
 SPK_NOTIF_CONST(kSPKNotificationShareSheetPin, "share_sheet_pin");
 SPK_NOTIF_CONST(kSPKNotificationCopyComment, "copy_comment");
@@ -116,6 +120,7 @@ NSString *const kSPKNotificationHapticsEnabledKey = @"notifs_haptics";
 NSString *const kSPKNotificationPillLiquidGlassEnabledKey = @"notifs_pill_liquid_glass";
 NSString *const kSPKNotificationProgressSubtitleStyleKey = @"notifs_progress_subtitle_style";
 NSString *const kSPKNotificationPillPositionKey = @"notifs_pill_position";
+NSString *const kSPKNotificationStyleKey = @"notifs_style";
 
 static CGFloat const kSPKNotificationStackSpacing = 8.0;
 static CGFloat const kSPKNotificationTopMargin = 8.0;
@@ -123,7 +128,10 @@ static CGFloat const kSPKNotificationTopMargin = 8.0;
 // toolbar above it that the safe area doesn't cover. Lift bottom pills further so
 // they float clear of that chrome instead of overlapping it.
 static CGFloat const kSPKNotificationBottomMargin = 60.0;
+// Where Instagram presents its own toast: bottom edge 57pt above the safe area.
+static CGFloat const kSPKNotificationInstagramBottomMargin = 57.0;
 static NSTimeInterval const kSPKNotificationInsertDuration = 0.55;
+static NSTimeInterval const kSPKNotificationInstagramFadeInDuration = 0.15;
 static NSTimeInterval const kSPKNotificationDefaultPillDuration = 1.5;
 static NSTimeInterval const kSPKNotificationMinPillDuration = 0.5;
 static NSTimeInterval const kSPKNotificationMaxPillDuration = 5.0;
@@ -231,13 +239,16 @@ NSArray<NSDictionary *> *SPKNotificationPreferenceSections(void) {
               SPKNotificationItem(kSPKNotificationDirectVisualMarkSeen, @"Mark Visual Message as Seen", @"view_twice"),
               SPKNotificationItem(kSPKNotificationThreadMessagesMarkSeen, @"Mark Messages as Seen", @"messages"),
               SPKNotificationItem(kSPKNotificationDirectThreadSeenRule, @"Chat Seen List Changes", @"eye"),
+              SPKNotificationItem(kSPKNotificationDirectHiddenChat, @"Hidden Chat Changes", @"messages_off"),
               SPKNotificationItem(kSPKNotificationUnsentMessage, @"Unsent Message", @"undo"),
               SPKNotificationItem(kSPKNotificationUnsentReaction, @"Removed Reaction", @"reactions"),
+              SPKNotificationItem(kSPKNotificationFakeLocation, @"Fake Location Changes", @"location"),
           ]},
         @{@"title" : @"Instants",
           @"items" : @[
               SPKNotificationItem(kSPKNotificationInstantsCaptureBlocked, @"Instant Capture Blocked", @"lock"),
               SPKNotificationItem(kSPKNotificationInstantsUpload, @"Instant Upload Failed", @"warning"),
+              SPKNotificationItem(kSPKNotificationInstantsMarkSeen, @"Mark Instant as Seen", @"eye"),
           ]},
         @{@"title" : @"Profile",
           @"items" : @[
@@ -321,6 +332,7 @@ NSDictionary<NSString *, id> *SPKNotificationDefaultPreferences(void) {
         kSPKNotificationPillDurationKey : @(kSPKNotificationDefaultPillDuration),
         kSPKNotificationProgressSubtitleStyleKey : @"both",
         kSPKNotificationPillPositionKey : @"top",
+        kSPKNotificationStyleKey : @"pill",
         kSPKNotificationHapticsEnabledKey : @YES,
     } mutableCopy];
 
@@ -398,6 +410,27 @@ NSTimeInterval SPKNotificationPillDuration(void) {
     if (duration <= 0.0)
         duration = kSPKNotificationDefaultPillDuration;
     return MIN(kSPKNotificationMaxPillDuration, MAX(kSPKNotificationMinPillDuration, duration));
+}
+
+BOOL SPKNotificationUsesInstagramStyle(void) {
+    return [[SPKUtils getStringPref:kSPKNotificationStyleKey] isEqualToString:@"instagram"];
+}
+
+UIImage *SPKNotificationIconNamed(NSString *iconResource, BOOL instagramStyle) {
+    if (iconResource.length == 0)
+        return nil;
+    NSString *name = iconResource;
+    if (instagramStyle) {
+        NSString *base = [name hasSuffix:@"_filled"] ? [name substringToIndex:name.length - @"_filled".length] : name;
+        NSString *outline = [base stringByAppendingString:@"_outline"];
+        if ([SPKAssetUtils resolvedInstagramIconNameForName:outline].length > 0)
+            name = outline;
+        else if (base.length < name.length && [SPKAssetUtils resolvedInstagramIconNameForName:base].length > 0)
+            name = base;
+    }
+    return [SPKAssetUtils instagramIconNamed:name
+                                   pointSize:instagramStyle ? kSPKNotificationInstagramIconSize : 16.0
+                               renderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
 void SPKNotificationTriggerHaptic(NSString *identifier, SPKNotificationTone tone) {
@@ -606,7 +639,8 @@ static BOOL SPKManualSeenSettingsUIVisible(void) {
 
 - (CGFloat)offsetForIndex:(NSUInteger)index {
     BOOL isBottom = [[SPKUtils getStringPref:kSPKNotificationPillPositionKey] isEqualToString:@"bottom"];
-    CGFloat offset = isBottom ? kSPKNotificationBottomMargin : kSPKNotificationTopMargin;
+    CGFloat bottomMargin = SPKNotificationUsesInstagramStyle() ? kSPKNotificationInstagramBottomMargin : kSPKNotificationBottomMargin;
+    CGFloat offset = isBottom ? bottomMargin : kSPKNotificationTopMargin;
     for (NSUInteger i = 0; i < index && i < self.visible.count; i++) {
         SPKNotificationPillView *pill = self.visible[i].pill;
         CGFloat height = CGRectGetHeight(pill.bounds);
@@ -676,13 +710,25 @@ static BOOL SPKManualSeenSettingsUIVisible(void) {
     CGFloat entranceY = isBottom ? 24.0 : -24.0;
     pill.transform = CGAffineTransformConcat(CGAffineTransformMakeTranslation(0.0, entranceY), CGAffineTransformMakeScale(0.88, 0.88));
     anchor.constant = isBottom ? -[self offsetForIndex:self.visible.count - 1] : [self offsetForIndex:self.visible.count - 1];
+    // Glass does not show a tint change while it fades in, so the Instagram toast
+    // fades quickly and a result landing during the entrance shows at once.
+    if (pill.instagramSkin) {
+        [UIView animateWithDuration:kSPKNotificationInstagramFadeInDuration
+                              delay:0
+                            options:UIViewAnimationOptionCurveEaseOut
+                         animations:^{
+                             pill.alpha = 1.0;
+                         }
+                         completion:nil];
+    }
     [UIView animateWithDuration:kSPKNotificationInsertDuration
                           delay:0
          usingSpringWithDamping:0.78
           initialSpringVelocity:0.85
                         options:UIViewAnimationOptionCurveEaseOut
                      animations:^{
-                         pill.alpha = 1.0;
+                         if (!pill.instagramSkin)
+                             pill.alpha = 1.0;
                          pill.transform = CGAffineTransformIdentity;
                          [self relayoutAnimated:NO];
                      }
@@ -762,28 +808,35 @@ static BOOL SPKManualSeenSettingsUIVisible(void) {
         // When the user is already in the manage list (or anywhere in Settings),
         // don't advertise/enable "tap to open" — there's nothing to open.
         BOOL suppressSeenListTap = SPKManualSeenSettingsUIVisible();
+        // Hidden chat pills keep the info tone so their icon says which way the chat
+        // went, and still open their list.
+        BOOL offersListTap = (tone == SPKNotificationToneSuccess ||
+                              [identifier isEqualToString:kSPKNotificationDirectHiddenChat]) &&
+                             !suppressSeenListTap;
         NSString *resolvedSubtitle = subtitle;
-        if (tone == SPKNotificationToneSuccess && !suppressSeenListTap) {
+        if (offersListTap) {
             if ([identifier isEqualToString:kSPKNotificationStorySeenUserRule] ||
                 [identifier isEqualToString:kSPKNotificationProfileStorySeenUserRule]) {
-                BOOL manualSeenEnabled = [SPKUtils getBoolPref:@"stories_manual_seen"];
+                BOOL manualSeenEnabled = SPKStoryManualSeenEnabled();
                 resolvedSubtitle = [NSString stringWithFormat:@"Tap to open %@", manualSeenEnabled ? @"excluded list" : @"included list"];
             } else if ([identifier isEqualToString:kSPKNotificationDirectThreadSeenRule] ||
                        [identifier isEqualToString:kSPKNotificationProfileMessagesSeenUserRule]) {
                 BOOL manualSeenEnabled = [SPKUtils getBoolPref:@"msgs_manual_seen"];
                 resolvedSubtitle = [NSString stringWithFormat:@"Tap to open %@", manualSeenEnabled ? @"excluded list" : @"included list"];
+            } else if ([identifier isEqualToString:kSPKNotificationDirectHiddenChat]) {
+                // A pill's own subtitle, such as how to get the chat back, comes first.
+                if (resolvedSubtitle.length == 0)
+                    resolvedSubtitle = @"Tap to open hidden chats";
             } else if (SPKAutoSaveListViewControllerForRuleIdentifier(identifier)) {
                 resolvedSubtitle = @"Tap to open auto-save list";
             }
         }
 
         NSString *resolvedIconResource = SPKNotificationIconResourceForTone(iconResource, tone);
-        UIImage *icon = resolvedIconResource.length
-                            ? [SPKAssetUtils instagramIconNamed:resolvedIconResource pointSize:16.0 renderingMode:UIImageRenderingModeAlwaysTemplate]
-                            : nil;
+        UIImage *icon = SPKNotificationIconNamed(resolvedIconResource, SPKNotificationUsesInstagramStyle());
         SPKNotificationPillView *pill = [SPKNotificationPillView toastPillWithTitle:title subtitle:resolvedSubtitle icon:icon tone:tone];
 
-        if (tone == SPKNotificationToneSuccess && !suppressSeenListTap) {
+        if (offersListTap) {
             if ([identifier isEqualToString:kSPKNotificationStorySeenUserRule] ||
                 [identifier isEqualToString:kSPKNotificationProfileStorySeenUserRule]) {
                 pill.onTapWhenCompleted = ^{
@@ -793,6 +846,10 @@ static BOOL SPKManualSeenSettingsUIVisible(void) {
                        [identifier isEqualToString:kSPKNotificationProfileMessagesSeenUserRule]) {
                 pill.onTapWhenCompleted = ^{
                     [SPKUtils presentViewControllerInSheet:SPKDirectManualSeenListViewController()];
+                };
+            } else if ([identifier isEqualToString:kSPKNotificationDirectHiddenChat]) {
+                pill.onTapWhenCompleted = ^{
+                    [SPKUtils presentViewControllerInSheet:SPKDirectHiddenChatsListViewController()];
                 };
             } else if (SPKAutoSaveListViewControllerForRuleIdentifier(identifier)) {
                 pill.onTapWhenCompleted = ^{

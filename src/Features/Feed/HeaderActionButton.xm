@@ -9,6 +9,7 @@
 #import "../../Shared/Account/SPKAccountManager.h"
 #import "../../Shared/Downloads/SPKDownloadService.h"
 #import "../../Shared/Gallery/SPKGalleryViewController.h"
+#import "../../Shared/Navigation/SPKTabConfiguration.h"
 #import "../../Shared/UI/SPKChrome.h"
 #import "../../Shared/UI/SPKChromeGlassMirror.h"
 #import "../../Utils.h"
@@ -36,19 +37,6 @@ static const CGFloat kSPKHeaderButtonSide = 44.0;    // button footprint
 static const CGFloat kSPKHeaderButtonGlyph = 24.0;   // glyph point size
 static const CGFloat kSPKHeaderButtonSpacing = 8.0;
 static const CGFloat kSPKHeaderButtonLeftInset = 16.0;
-
-static BOOL SPKIsMessagesOnlyMode(void) {
-    BOOL msgsVisible = ![SPKUtils getBoolPref:@"interface_hide_msgs_tab"];
-    BOOL feedHidden = [SPKUtils getBoolPref:@"interface_hide_feed_tab"];
-    BOOL exploreHidden = [SPKUtils getBoolPref:@"interface_hide_explore_tab"];
-    BOOL reelsHidden = [SPKUtils getBoolPref:@"interface_hide_reels_tab"];
-    BOOL profileHidden = [SPKUtils getBoolPref:@"interface_hide_profile_tab"];
-    
-    BOOL usesClassic = [[SPKUtils getStringPref:@"interface_nav_order"] isEqualToString:@"classic"];
-    BOOL createHidden = !usesClassic || [SPKUtils getBoolPref:@"interface_hide_create_tab"];
-    
-    return msgsVisible && feedHidden && exploreHidden && reelsHidden && profileHidden && createHidden;
-}
 
 static const void *kSPKInboxHeaderButtonAssocKey = &kSPKInboxHeaderButtonAssocKey;
 static const void *kSPKInboxHeaderButtonLastFrameAssocKey = &kSPKInboxHeaderButtonLastFrameAssocKey;
@@ -180,7 +168,8 @@ NSString *SPKHeaderButtonDefaultActionIconName(void) {
 @end
 
 static void SPKHeaderFireShortcutHaptic(void) {
-    // The toggle that gated this is gone; the feedback is part of the button.
+    if (![SPKUtils getBoolPref:@"tools_shortcut_haptics"])
+        return;
     UISelectionFeedbackGenerator *feedback = [UISelectionFeedbackGenerator new];
     [feedback selectionChanged];
 }
@@ -447,7 +436,7 @@ static NSString *SPKHeaderButtonConfigSignature(NSArray<SPKHeaderDestination *> 
     // No setting: the button exists exactly when the tab bar is gone, because
     // the inbox header is then the only chrome left on screen.
     BOOL messagesOnly = [SPKUtils getBoolPref:@"interface_hide_tab_bar_in_messages_only"] &&
-                         SPKIsMessagesOnlyMode();
+                         SPKTabConfigurationIsMessagesOnly();
     if (!messagesOnly) {
         SPKFeedHeaderActionButton *button = [self spk_inboxHeaderButton];
         if (button) {
@@ -502,7 +491,7 @@ static NSString *SPKHeaderButtonConfigSignature(NSArray<SPKHeaderDestination *> 
         return;
 
     BOOL messagesOnly = [SPKUtils getBoolPref:@"interface_hide_tab_bar_in_messages_only"] &&
-                         SPKIsMessagesOnlyMode();
+                         SPKTabConfigurationIsMessagesOnly();
     if (!messagesOnly) {
         button.hidden = YES;
         return;
@@ -741,7 +730,7 @@ void SPKInstallHeaderActionButtonHooksIfEnabled(void) {
     // The feed header button is gone; only the inbox one remains, and it
     // installs whenever the tab bar is hidden in Messages-only mode.
     BOOL inboxEnabled = [SPKUtils getBoolPref:@"interface_hide_tab_bar_in_messages_only"] &&
-                        SPKIsMessagesOnlyMode();
+                        SPKTabConfigurationIsMessagesOnly();
 
     if (!inboxEnabled) {
         SPKLog(@"HeaderButton", @"[Sparkle] Header action button disabled — skipping install");

@@ -27,14 +27,11 @@
 }
 %end
 
-// Disable auto-scrolling reels
+// The auto scroll toggle in Reels goes through this setter, so One reel at a
+// time keeps it off.
 %hook _TtC19IGSundialAutoScroll19IGSundialAutoScroll
-- (void)setIsEnabled:(BOOL)enabled {
-    if ([SPKUtils getBoolPref:@"reels_disable_scrolling"]) {
-        %orig(NO);
-    } else {
-        %orig(enabled);
-    }
+- (void)setUserEnabled:(BOOL)enabled {
+    %orig([SPKUtils getBoolPref:@"reels_disable_scrolling"] ? NO : enabled);
 }
 %end
 

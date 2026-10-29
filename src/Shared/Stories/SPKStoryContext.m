@@ -48,7 +48,49 @@ static id SPKStoryFirstObjectForSelectors(id target, NSArray<NSString *> *select
 static NSString *SPKStoryMediaID(id media);
 static NSString *SPKStoryFullNameFromMediaObject(id media);
 
-static id SPKStorySectionControllerFromOverlay(UIView *overlayView) {
+static UIViewController *SPKStoryViewerControllerFromController(UIViewController *controller, Class viewerClass) {
+    for (UIViewController *walker = controller; walker; walker = walker.parentViewController) {
+        if (!viewerClass || [walker isKindOfClass:viewerClass])
+            return walker;
+    }
+    for (UIViewController *walker = controller.presentingViewController; walker; walker = walker.presentingViewController) {
+        if (!viewerClass || [walker isKindOfClass:viewerClass])
+            return walker;
+    }
+    return nil;
+}
+
+// The story viewer itself, found through the responder chain first: the seen
+// receipts session of the eye button's toggle mode is keyed by it.
+static UIViewController *SPKStoryViewerControllerFromOverlay(UIView *overlayView) {
+    if (!overlayView)
+        return nil;
+
+    Class viewerClass = NSClassFromString(@"IGStoryViewerViewController");
+    for (UIResponder *responder = overlayView; responder; responder = responder.nextResponder) {
+        if (viewerClass && [responder isKindOfClass:viewerClass])
+            return (UIViewController *)responder;
+    }
+
+    id ancestor = SPKObjectForSelector(overlayView, @"_viewControllerForAncestor");
+    UIViewController *viewer = [ancestor isKindOfClass:[UIViewController class]]
+                                   ? SPKStoryViewerControllerFromController(ancestor, viewerClass)
+                                   : nil;
+    if (viewer)
+        return viewer;
+
+    UIViewController *nearest = [SPKUtils nearestViewControllerForView:overlayView];
+    viewer = SPKStoryViewerControllerFromController(nearest, viewerClass);
+    return viewer ?: nearest;
+}
+
+static id SPKStorySectionControllerFromOverlay(UIView *overlayView, UIViewController *viewerController) {
+    id sectionController = SPKStoryFirstObjectForSelectors(viewerController, @[ @"currentlyDisplayedSectionController", @"currentSectionController" ]);
+    if (!sectionController)
+        sectionController = [SPKUtils getIvarForObj:viewerController name:"_currentSectionController"];
+    if (sectionController)
+        return sectionController;
+
     if (!overlayView)
         return nil;
     NSArray<NSString *> *delegateSelectors = @[ @"mediaOverlayDelegate", @"retryDelegate", @"tappableOverlayDelegate", @"buttonDelegate" ];
@@ -63,13 +105,6 @@ static id SPKStorySectionControllerFromOverlay(UIView *overlayView) {
             return delegate;
     }
     return nil;
-}
-
-static UIViewController *SPKStoryViewerControllerFromOverlay(UIView *overlayView) {
-    id ancestor = SPKObjectForSelector(overlayView, @"_viewControllerForAncestor");
-    if ([ancestor isKindOfClass:[UIViewController class]])
-        return ancestor;
-    return [SPKUtils nearestViewControllerForView:overlayView];
 }
 
 static id SPKStoryMediaFromAnyObject(id object) {
@@ -195,7 +230,7 @@ SPKStoryContext *SPKStoryContextFromOverlay(UIView *overlayView) {
     SPKStoryContext *context = [[SPKStoryContext alloc] init];
     context.overlayView = overlayView;
     context.viewerController = SPKStoryViewerControllerFromOverlay(overlayView);
-    context.sectionController = SPKStorySectionControllerFromOverlay(overlayView);
+    context.sectionController = SPKStorySectionControllerFromOverlay(overlayView, context.viewerController);
 
     SEL markSelector = NSSelectorFromString(@"fullscreenSectionController:didMarkItemAsSeen:");
     id sectionDelegate = SPKObjectForSelector(context.sectionController, @"delegate");
@@ -210,14 +245,30 @@ SPKStoryContext *SPKStoryContextFromOverlay(UIView *overlayView) {
     }
 
     if (!context.sectionController && context.markSeenTarget) {
-        context.sectionController = SPKStoryFirstObjectForSelectors(context.markSeenTarget, @[ @"currentSectionController" ]) ?: [SPKUtils getIvarForObj:context.markSeenTarget name:"_currentSectionController"];
+        context.sectionController = SPKStoryFirstObjectForSelectors(context.markSeenTarget, @[ @"currentlyDisplayedSectionController", @"currentSectionController" ]) ?: [SPKUtils getIvarForObj:context.markSeenTarget name:"_currentSectionController"];
     }
 
     id media = SPKStoryFirstObjectForSelectors(context.sectionController, @[ @"currentStoryItem", @"currentItem", @"item" ]);
     if (!media)
-        media = SPKStoryFirstObjectForSelectors(context.markSeenTarget, @[ @"currentStoryItem", @"currentItem", @"item" ]);
-    if (!media)
         media = SPKStoryFirstObjectForSelectors(context.viewerController, @[ @"currentStoryItem", @"currentItem", @"item" ]);
+    id currentViewModel = SPKStoryFirstObjectForSelectors(context.viewerController, @[ @"currentViewModel" ]);
+    if (!media && currentViewModel) {
+        SEL currentItemSelector = NSSelectorFromString(@"currentStoryItemForViewModel:");
+        if ([context.viewerController respondsToSelector:currentItemSelector]) {
+            @try {
+                media = ((id (*)(id, SEL, id))objc_msgSend)(context.viewerController, currentItemSelector, currentViewModel);
+            } @catch (__unused NSException *exception) {
+            }
+        }
+    }
+    if (!media) {
+        id itemContext = SPKStoryFirstObjectForSelectors(overlayView, @[ @"currentStoryItemContext", @"_currentStoryItemContext" ]);
+        media = SPKStoryFirstObjectForSelectors(itemContext, @[ @"storyItem", @"item", @"media" ]);
+    }
+    if (!media)
+        media = SPKStoryFirstObjectForSelectors(overlayView, @[ @"currentStoryItem", @"currentItem", @"item" ]);
+    if (!media)
+        media = SPKStoryFirstObjectForSelectors(context.markSeenTarget, @[ @"currentStoryItem", @"currentItem", @"item" ]);
     context.media = SPKStoryMediaFromAnyObject(media);
 
     if (!context.media) {
@@ -237,7 +288,6 @@ SPKStoryContext *SPKStoryContextFromOverlay(UIView *overlayView) {
         return context;
     }
 
-    id currentViewModel = SPKStoryFirstObjectForSelectors(context.viewerController, @[ @"currentViewModel" ]);
     NSMutableArray *resolved = [NSMutableArray array];
     NSString *currentUserPK = SPKStoryUserPKFromMediaObject(context.media);
     for (id candidate in @[ context.sectionController ?: (id)NSNull.null, currentViewModel ?: (id)NSNull.null, context.viewerController ?: (id)NSNull.null ]) {
@@ -293,8 +343,15 @@ SPKStoryContext *SPKStoryContextFromMedia(id media) {
 
 BOOL SPKStoryMarkContextAsSeen(SPKStoryContext *context) {
     SEL markSelector = NSSelectorFromString(@"fullscreenSectionController:didMarkItemAsSeen:");
-    if (!context.markSeenTarget || !context.sectionController || !context.media || ![context.markSeenTarget respondsToSelector:markSelector])
+    if (!context.markSeenTarget || !context.sectionController || !context.media || ![context.markSeenTarget respondsToSelector:markSelector]) {
+        SPKLog(@"Stories",
+               @"[Sparkle StorySeen] Unable to mark seen viewer=%@ section=%@ target=%@ media=%@",
+               context.viewerController ? NSStringFromClass(context.viewerController.class) : @"nil",
+               context.sectionController ? NSStringFromClass([context.sectionController class]) : @"nil",
+               context.markSeenTarget ? NSStringFromClass([context.markSeenTarget class]) : @"nil",
+               context.media ? NSStringFromClass([context.media class]) : @"nil");
         return NO;
+    }
     // IG reports each story separately, so every story up to the displayed one is
     // marked, oldest first, and the reel's seen date only moves forward.
     NSMutableArray *itemsToMark = [NSMutableArray array];
@@ -588,8 +645,35 @@ BOOL SPKStoryManualSeenListContainsUser(NSString *pk, BOOL manualSeenEnabled) {
     return NO;
 }
 
+// Not persisted and scoped to one story viewer, so leaving stories or a relaunch
+// always returns to blocking receipts; the weak reference also ends the session
+// if the viewer goes away without a disappearance callback.
+static __weak UIViewController *SPKStorySeenReceiptsSessionViewer = nil;
+
+BOOL SPKStoryManualSeenEnabled(void) {
+    NSString *mode = [SPKUtils getStringPref:@"stories_manual_seen_mode"];
+    return [mode isEqualToString:@"tap"] || [mode isEqualToString:@"toggle"];
+}
+
+BOOL SPKStoryEyeButtonTogglesSeenReceipts(void) {
+    return [[SPKUtils getStringPref:@"stories_manual_seen_mode"] isEqualToString:@"toggle"];
+}
+
+BOOL SPKStorySeenReceiptsSessionEnabled(void) {
+    return SPKStorySeenReceiptsSessionViewer != nil && SPKStoryEyeButtonTogglesSeenReceipts();
+}
+
+void SPKStorySetSeenReceiptsSessionViewer(UIViewController *viewer) {
+    SPKStorySeenReceiptsSessionViewer = viewer;
+}
+
+void SPKStoryEndSeenReceiptsSessionForViewer(UIViewController *viewer) {
+    if (viewer && SPKStorySeenReceiptsSessionViewer == viewer)
+        SPKStorySeenReceiptsSessionViewer = nil;
+}
+
 BOOL SPKStoryManualSeenAppliesToContext(SPKStoryContext *context) {
-    BOOL manualSeenEnabled = [SPKUtils getBoolPref:@"stories_manual_seen"];
+    BOOL manualSeenEnabled = SPKStoryManualSeenEnabled();
     NSString *pk = SPKStoryUserPKFromMediaObject(context.media);
     BOOL listed = SPKStoryManualSeenListContainsUser(pk, manualSeenEnabled);
     return manualSeenEnabled ? !listed : listed;
@@ -648,7 +732,7 @@ static void SPKStoryEnrichManualSeenUserEntryIfNeeded(NSDictionary *entry, BOOL 
 void SPKStoryToggleUserForCurrentManualSeenMode(NSString *pk, NSString *username, NSString *fullName, NSString *profilePicUrl) {
     if (pk.length == 0)
         return;
-    BOOL manualSeenEnabled = [SPKUtils getBoolPref:@"stories_manual_seen"];
+    BOOL manualSeenEnabled = SPKStoryManualSeenEnabled();
     NSString *normalized = SPKStoryNormalizeUsername(username);
 
     NSArray<NSDictionary *> *users = SPKStoryManualSeenUserList(manualSeenEnabled);
@@ -710,7 +794,7 @@ static NSString *SPKStoryManualSeenListHelpText(BOOL manualSeenEnabled) {
 
 - (instancetype)init {
     if ((self = [super init])) {
-        _manualSeenEnabled = [SPKUtils getBoolPref:@"stories_manual_seen"];
+        _manualSeenEnabled = SPKStoryManualSeenEnabled();
         self.title = SPKStoryManualSeenListTitle(_manualSeenEnabled);
         self.showsAddButton = YES;
         self.infoText = SPKStoryManualSeenListHelpText(_manualSeenEnabled);
@@ -879,7 +963,7 @@ static BOOL SPKStoryCurrentUserRuleState(SPKStoryContext *context, NSString **ou
     if (username.length == 0)
         return NO;
 
-    BOOL manualSeenEnabled = [SPKUtils getBoolPref:@"stories_manual_seen"];
+    BOOL manualSeenEnabled = SPKStoryManualSeenEnabled();
     NSString *pk = SPKStoryUserPKFromMediaObject(context.media);
     BOOL listed = SPKStoryManualSeenListContainsUser(pk, manualSeenEnabled);
     NSString *listTitle = SPKStoryManualSeenListTitle(manualSeenEnabled);
@@ -924,7 +1008,7 @@ NSString *SPKStoryCurrentUserRuleConfirmationMessage(SPKStoryContext *context) {
 void SPKStoryToggleUserRuleForPK(NSString *pk, NSString *username, NSString *fullName, NSString *profilePicUrl) {
     if (pk.length == 0)
         return;
-    BOOL manualSeenEnabled = [SPKUtils getBoolPref:@"stories_manual_seen"];
+    BOOL manualSeenEnabled = SPKStoryManualSeenEnabled();
     BOOL listed = SPKStoryManualSeenListContainsUser(pk, manualSeenEnabled);
     SPKStoryToggleUserForCurrentManualSeenMode(pk, username, fullName, profilePicUrl);
     if (!listed) {

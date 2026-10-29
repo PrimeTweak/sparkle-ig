@@ -64,13 +64,17 @@ UIMenu *SPKReelsTapControlMenu(void);
 UIMenu *SPKReelsAutoScrollDefaultMenu(void);
 UIMenu *SPKMainFeedModeMenu(void);
 UIMenu *SPKSeenButtonPositionMenu(void);
+UIMenu *SPKHiddenChatsRevealResetMenu(void);
 UIMenu *SPKLastActiveFormatMenu(void);
-UIMenu *SPKLaunchTabMenu(void);
-UIMenu *SPKSwipeBetweenTabsMenu(void);
 UIMenu *SPKLiquidGlassTabBarStateMenu(void);
+UIMenu *SPKScrollEdgeStyleMenu(void);
 UIMenu *SPKSwipeCloseCommentsDirectionMenu(void);
+UIMenu *SPKStoryManualSeenModeMenu(void);
+UIMenu *SPKPlaybackSpeedScopeMenu(NSString *defaultsKey);
 UIMenu *SPKCacheAutoClearMenu(void);
+UIMenu *SPKLinkOpeningModeMenu(void);
 UIMenu *SPKNotificationProgressSubtitleStyleMenu(void);
+UIMenu *SPKNotificationStyleMenu(void);
 UIMenu *SPKNotificationPillPositionMenu(void);
 UIMenu *SPKMediaVideoQualityMenu(void);
 UIMenu *SPKMediaPhotoQualityMenu(void);
@@ -81,5 +85,14 @@ UIMenu *SPKAutoSaveFilterModeMenu(NSString *filterModeKey, NSString *subjectPlur
 UIMenu *SPKStoryAutoSaveFilterModeMenu(void);
 UIMenu *SPKGalleryShortcutTargetMenu(void);
 UIMenu *SPKCommentSortModeMenu(void);
+
+/// The view controller a settings row should present from: the topmost presented
+/// controller, which is normally the navigation controller wrapping the page.
+UIViewController *SPKSettingsTopPresenter(void);
+
+/// Reloads whichever settings page is on screen behind `presenter`, so rows whose
+/// enabled state depends on something outside NSUserDefaults (a keychain-backed lock,
+/// for one) redraw after the flow that changed it finishes.
+void SPKSettingsReloadPresenter(UIViewController *presenter);
 
 NS_ASSUME_NONNULL_END

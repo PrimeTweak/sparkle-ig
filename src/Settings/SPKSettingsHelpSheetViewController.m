@@ -11,6 +11,8 @@ static CGFloat const kSPKHelpBottomPadding = 32.0;
 static CGFloat const kSPKHelpChromeHeight = 60.0;  // grabber + title bar
 static CGFloat const kSPKHelpMinimumHeight = 180.0;
 
+NSString *const SPKTopicSectionHelpKey = @"spk_sectionHelp";
+
 NSArray<SPKSetting *> *SPKSettingsHelpRowsInSection(NSDictionary *section) {
     if (![section isKindOfClass:[NSDictionary class]])
         return @[];
@@ -20,6 +22,12 @@ NSArray<SPKSetting *> *SPKSettingsHelpRowsInSection(NSDictionary *section) {
         return @[];
 
     NSMutableArray<SPKSetting *> *helpRows = [NSMutableArray array];
+    NSString *sectionHelp = section[SPKTopicSectionHelpKey];
+    if ([sectionHelp isKindOfClass:[NSString class]] && sectionHelp.length > 0) {
+        SPKSetting *entry = [SPKSetting staticCellWithTitle:@"" subtitle:@"" icon:nil];
+        entry.helpText = sectionHelp;
+        [helpRows addObject:entry];
+    }
     for (SPKSetting *row in rows) {
         if (![row isKindOfClass:[SPKSetting class]])
             continue;
@@ -142,6 +150,24 @@ NSArray<SPKSetting *> *SPKSettingsHelpRowsInSection(NSDictionary *section) {
     container.translatesAutoresizingMaskIntoConstraints = NO;
 
     UIImage *icon = row.iconProvider ? row.iconProvider() : row.icon;
+    // Section-wide help has neither icon nor title: its text spans the full width.
+    if (!icon && row.title.length == 0) {
+        UILabel *textLabel = [UILabel new];
+        textLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        textLabel.text = row.helpText;
+        textLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+        textLabel.adjustsFontForContentSizeCategory = YES;
+        textLabel.textColor = [SPKUtils SPKColor_InstagramSecondaryText];
+        textLabel.numberOfLines = 0;
+        [container addSubview:textLabel];
+        [NSLayoutConstraint activateConstraints:@[
+            [textLabel.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+            [textLabel.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+            [textLabel.topAnchor constraintEqualToAnchor:container.topAnchor],
+            [textLabel.bottomAnchor constraintEqualToAnchor:container.bottomAnchor]
+        ]];
+        return container;
+    }
     UIImageView *iconView = [[UIImageView alloc] initWithImage:icon];
     iconView.translatesAutoresizingMaskIntoConstraints = NO;
     iconView.contentMode = UIViewContentModeScaleAspectFit;

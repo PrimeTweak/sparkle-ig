@@ -1,5 +1,6 @@
 #import "SPKCore.h"
 
+#import "../Shared/Navigation/SPKTabConfiguration.h"
 #import "../Shared/UI/SPKNotificationCenter.h"
 #import "../Tweak.h"
 #import "../Utils.h"
@@ -17,8 +18,10 @@ static NSDictionary *SPKBootstrapDefaults(void) {
         @"stories_hide_recent_highlights" : @(NO),
         @"general_no_recent_searches" : @(NO),
         @"interface_liquid_glass_tabbar_mode" : @"default",
-        @"interface_progressive_blur" : @(YES),
+        @"interface_scroll_edge_style" : @"soft",
         @"interface_nav_order" : @"default",
+        @"interface_custom_tab_order" : @[ @"feed", @"clips", @"direct", @"search", @"profile" ],
+        @"interface_saved_tab_carrier" : @"none",
         @"interface_swipe_tabs" : @"default",
         @"interface_launch_tab" : @"default",
         @"interface_hide_feed_tab" : @(NO),
@@ -30,6 +33,9 @@ static NSDictionary *SPKBootstrapDefaults(void) {
         @"interface_hide_tab_bar_in_messages_only" : @(NO),
         @"interface_open_clipboard_link" : @(YES),
         @"gallery_quick_access_tab" : @"direct-inbox-tab",
+        @"tools_settings_shortcut" : @(NO),
+        @"tools_shortcut_haptics" : @(YES),
+        @"tools_open_settings_on_launch" : @(NO),
         @"tools_disable_all" : @(NO),
 #if SPK_DEV
         @"tools_perf_meter" : @(NO),
@@ -118,6 +124,12 @@ static NSDictionary *SPKFeatureDefaults(void) {
         @"stories_auto_save_filter_mode" : @"all",
         @"msgs_auto_save" : @(NO),
         @"msgs_unlock_preview" : @(NO),
+        @"msgs_hidden_chats" : @(NO),
+        @"msgs_hidden_chats_list" : @[],
+        @"msgs_hidden_chats_reveal_reset" : @"leave_inbox",
+        @"msgs_hidden_chats_mute_notifications" : @(YES),
+        @"msgs_hidden_chats_exclude_badge" : @(YES),
+        @"msgs_hidden_chats_hide_in_share_sheet" : @(YES),
         @"msgs_auto_save_filter_mode" : @"all",
         @"instants_auto_save" : @(NO),
         @"instants_auto_save_filter_mode" : @"all",
@@ -203,6 +215,8 @@ static NSDictionary *SPKFeatureDefaults(void) {
         @"msgs_download_audio_messages" : @(NO),
         @"msgs_download_notes_audio" : @(NO),
         @"msgs_copy_note_text" : @(YES),
+        @"msgs_fake_location" : @(NO),
+        @"msgs_fake_location_map_button" : @(NO),
         @"msgs_upload_audio_messages" : @(NO),
         @"msgs_audio_upload_trim" : @(NO),
         @"msgs_upload_gallery_media" : @(NO),
@@ -233,6 +247,31 @@ static NSDictionary *SPKFeatureDefaults(void) {
         @"general_hide_create_group" : @(NO),
         @"interface_hide_ui_on_capture" : @(NO),
         @"feed_disable_autoplay" : @(NO),
+        @"reels_stop_looping" : @(NO),
+        @"reels_show_repost_date" : @(NO),
+        @"stories_hide_audio_unavailable_toast" : @(NO),
+        @"stories_mentions_count_badge" : @(YES),
+        @"interface_explore_square_grid" : @(NO),
+        @"profile_square_grid" : @(NO),
+        @"general_comments_gif_title" : @(NO),
+        @"stories_manual_seen_mode" : @"off",
+        @"stories_manual_seen_keep_local" : @(NO),
+        @"stories_confirm_mark_seen" : @(NO),
+        @"reels_playback_controls" : @(NO),
+        @"reels_playback_saved_speed" : @(1.0),
+        @"reels_playback_speed_scope" : @"session",
+        @"stories_playback_controls" : @(NO),
+        @"stories_playback_saved_speed" : @(1.0),
+        @"stories_playback_speed_scope" : @"session",
+        @"instants_manual_seen" : @(NO),
+        @"instants_advance_on_manual_seen" : @(NO),
+        @"instants_hide_in_inbox" : @(NO),
+        @"general_tappable_text_links" : @(NO),
+        @"general_link_opening_mode" : @"default",
+        @"general_preview_live_text" : @(YES),
+        @"general_preview_allow_pip" : @(NO),
+        @"downloads_background" : @(YES),
+        @"downloads_background_notification" : @(NO),
     } mutableCopy];
 
     [defaults addEntriesFromDictionary:SPKNotificationDefaultPreferences()];
@@ -291,10 +330,69 @@ static void SPKCoreMigrateMetaPromotionsPreference(void) {
     [defaults setBool:YES forKey:migratedKey];
 }
 
+// Manually mark seen for stories became a menu: a switch that was on becomes the
+// On tap mode. The mode key is new, so the old value is carried over as is.
+static void SPKCoreMigrateStoryManualSeenMode(void) {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    static NSString *const migratedKey = @"stories_manual_seen_mode_migrated";
+    if ([defaults boolForKey:migratedKey])
+        return;
+
+    NSString *legacyKey = @"stories_manual_seen";
+    NSString *newKey = @"stories_manual_seen_mode";
+    for (NSString *key in [defaults dictionaryRepresentation].allKeys) {
+        if (![key isEqualToString:legacyKey] && ![key hasSuffix:[@"_" stringByAppendingString:legacyKey]])
+            continue;
+        id value = [defaults objectForKey:key];
+        if ([value respondsToSelector:@selector(boolValue)]) {
+            NSString *target = [[key substringToIndex:key.length - legacyKey.length] stringByAppendingString:newKey];
+            [defaults setObject:([value boolValue] ? @"tap" : @"off") forKey:target];
+        }
+        [defaults removeObjectForKey:key];
+    }
+
+    [defaults setBool:YES forKey:migratedKey];
+}
+
+// Start Reels muted became device-global; an account that had it on turns it on
+// for every account.
+static void SPKCoreMigrateReelsStartMutedGlobal(void) {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    static NSString *const migratedKey = @"reels_disable_auto_unmute_global_migrated";
+    if ([defaults boolForKey:migratedKey])
+        return;
+
+    NSString *key = @"reels_disable_auto_unmute";
+    for (NSString *candidate in [defaults dictionaryRepresentation].allKeys) {
+        if (![candidate hasPrefix:@"u_"] || ![candidate hasSuffix:[@"_" stringByAppendingString:key]])
+            continue;
+        if ([defaults boolForKey:candidate])
+            [defaults setBool:YES forKey:key];
+        [defaults removeObjectForKey:candidate];
+    }
+
+    [defaults setBool:YES forKey:migratedKey];
+}
+
+// The Progressive blur switch became the scroll edge style menu: on was the soft
+// blur, off left Instagram's own hiding in place.
+static void SPKCoreMigrateScrollEdgeStyle(void) {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *legacyKey = @"interface_progressive_blur";
+    id value = [defaults objectForKey:legacyKey];
+    if (!value)
+        return;
+    if ([value respondsToSelector:@selector(boolValue)])
+        [defaults setObject:([value boolValue] ? @"soft" : @"off") forKey:@"interface_scroll_edge_style"];
+    [defaults removeObjectForKey:legacyKey];
+}
+
 void SPKCoreRegisterBootstrapDefaults(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         [[NSUserDefaults standardUserDefaults] registerDefaults:SPKBootstrapDefaults()];
+        SPKCoreMigrateScrollEdgeStyle();
+        SPKMigrateTabConfigurationIfNeeded();
         SPKStartupMark(@"bootstrap defaults registered");
     });
 }
@@ -307,6 +405,8 @@ void SPKCoreRegisterDefaults(void) {
         [[NSUserDefaults standardUserDefaults] registerDefaults:SPKFeatureDefaults()];
         SPKCoreMigrateInstantsCameraButtonPreference();
         SPKCoreMigrateMetaPromotionsPreference();
+        SPKCoreMigrateStoryManualSeenMode();
+        SPKCoreMigrateReelsStartMutedGlobal();
         SPKStartupMark(@"feature defaults registered");
     });
 }

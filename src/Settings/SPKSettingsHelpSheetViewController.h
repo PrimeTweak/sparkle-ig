@@ -26,4 +26,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// removed by their `hiddenProvider` are skipped.
 FOUNDATION_EXPORT NSArray<SPKSetting *> *SPKSettingsHelpRowsInSection(NSDictionary *section);
 
+/// Section dictionary key for help about the section as a whole, shown first in
+/// its sheet without a title. For sections whose rows are items, not settings.
+FOUNDATION_EXPORT NSString *const SPKTopicSectionHelpKey;
+
 NS_ASSUME_NONNULL_END

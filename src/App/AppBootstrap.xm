@@ -1,4 +1,5 @@
 #import "../InstagramHeaders.h"
+#import "../Shared/Navigation/SPKTabConfiguration.h"
 #import "../Tweak.h"
 #import "../Utils.h"
 #import "SPKCore.h"
@@ -49,23 +50,10 @@ static void SPKScheduleHookPhase(NSTimeInterval delay, NSString *name, dispatch_
     });
 }
 
-static BOOL SPKIsMessagesOnlyMode(void) {
-    BOOL msgsVisible = ![SPKUtils getBoolPref:@"interface_hide_msgs_tab"];
-    BOOL feedHidden = [SPKUtils getBoolPref:@"interface_hide_feed_tab"];
-    BOOL exploreHidden = [SPKUtils getBoolPref:@"interface_hide_explore_tab"];
-    BOOL reelsHidden = [SPKUtils getBoolPref:@"interface_hide_reels_tab"];
-    BOOL profileHidden = [SPKUtils getBoolPref:@"interface_hide_profile_tab"];
-    
-    BOOL usesClassic = [[SPKUtils getStringPref:@"interface_nav_order"] isEqualToString:@"classic"];
-    BOOL createHidden = !usesClassic || [SPKUtils getBoolPref:@"interface_hide_create_tab"];
-    
-    return msgsVisible && feedHidden && exploreHidden && reelsHidden && profileHidden && createHidden;
-}
-
 static void SPKScheduleStagedFeatureHooks(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        BOOL msgOnly = SPKIsMessagesOnlyMode();
+        BOOL msgOnly = SPKTabConfigurationIsMessagesOnly();
         
         NSTimeInterval generalDelay = 0.25;
         NSTimeInterval feedDelay = msgOnly ? 0.65 : 0.35;

@@ -7,4 +7,8 @@ NS_ASSUME_NONNULL_BEGIN
 /// video format reports HDR/EDR; SDR Stories retain their normal tint.
 FOUNDATION_EXPORT void SPKStoryApplyDynamicRangeToButton(UIButton *button);
 
+/// Returns `color` lifted to the EDR headroom of the button's current tint, or
+/// unchanged when the button is SDR.
+FOUNDATION_EXPORT UIColor *SPKStoryDynamicRangeAccentTint(UIButton *button, UIColor *color);
+
 NS_ASSUME_NONNULL_END
